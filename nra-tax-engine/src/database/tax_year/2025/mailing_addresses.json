@@ -1,0 +1,65 @@
+{
+  "_description": "IRS and NY DTF mailing addresses for paper filings. Verify before each filing season since IRS service centers occasionally change. Source: 2024 Form 1040-NR instructions, 2024 Form 843 instructions, NY Pub 95.",
+  "_tax_year": 2025,
+  "federal": {
+    "1040nr_no_payment": {
+      "addressee": "Department of the Treasury",
+      "line2": "Internal Revenue Service",
+      "city_state_zip": "Austin, TX 73301-0215",
+      "country": "USA"
+    },
+    "1040nr_with_payment": {
+      "addressee": "Internal Revenue Service",
+      "line2": "P.O. Box 1303",
+      "city_state_zip": "Charlotte, NC 28201-1303",
+      "country": "USA"
+    },
+    "form_8843_only_no_1040nr": {
+      "_note": "When the filer has no income and only files Form 8843.",
+      "addressee": "Department of the Treasury",
+      "line2": "Internal Revenue Service Center",
+      "city_state_zip": "Austin, TX 73301-0215",
+      "country": "USA"
+    },
+    "form_843_fica_refund": {
+      "_note": "Form 843 for FICA refund mails separately from 1040-NR per IRS instructions. Address depends on the IRS center that processes the employer's quarterly returns; default to Cincinnati for FICA refund claims.",
+      "addressee": "Department of the Treasury",
+      "line2": "Internal Revenue Service Center",
+      "city_state_zip": "Cincinnati, OH 45999-0038",
+      "country": "USA"
+    },
+    "form_w7_itin_application": {
+      "_note": "Form W-7 + 1040-NR mail TOGETHER to the ITIN Operations unit, not the regular Austin address. Different street address from the no-payment 1040-NR mailing.",
+      "addressee": "Internal Revenue Service",
+      "line2": "ITIN Operations, P.O. Box 149342",
+      "city_state_zip": "Austin, TX 78714-9342",
+      "country": "USA"
+    }
+  },
+  "ny": {
+    "it203_refund": {
+      "addressee": "STATE PROCESSING CENTER",
+      "line2": "PO BOX 61000",
+      "city_state_zip": "ALBANY NY 12261-0001",
+      "country": "USA"
+    },
+    "it203_balance_due": {
+      "addressee": "STATE PROCESSING CENTER",
+      "line2": "PO BOX 15555",
+      "city_state_zip": "ALBANY NY 12212-5555",
+      "country": "USA"
+    },
+    "it201_full_year_resident_refund": {
+      "addressee": "STATE PROCESSING CENTER",
+      "line2": "PO BOX 61000",
+      "city_state_zip": "ALBANY NY 12261-0001",
+      "country": "USA"
+    },
+    "it201_full_year_resident_balance_due": {
+      "addressee": "STATE PROCESSING CENTER",
+      "line2": "PO BOX 15555",
+      "city_state_zip": "ALBANY NY 12212-5555",
+      "country": "USA"
+    }
+  }
+}
