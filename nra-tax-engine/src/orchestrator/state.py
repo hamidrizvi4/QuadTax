@@ -421,6 +421,31 @@ class ReturnStateObject(BaseModel):
         description="L6 output (part 2): computed tax liability and refund.",
     )
 
+    # ── Withholding reconciliation report (Phase 2) ───────────────────
+    withholding_report: dict = Field(
+        default_factory=dict,
+        description=(
+            "Aggregated withholding totals across all sources (W-2 box 2, "
+            "1042-S box 7a Ch 3/4, 1099-* box 4, estimated payments). "
+            "Produced by :func:`src.functions.withholding_reconciler.reconcile`. "
+            "Keys: federal_w2, federal_1042s_ch3, federal_1042s_ch4, federal_1099, "
+            "federal_estimated_payments, federal_total, ss_withheld_w2, "
+            "medicare_withheld_w2, state_income_tax_w2, local_income_tax_w2, "
+            "sources_seen."
+        ),
+    )
+
+    # ── Schedule A (NRA) itemized deductions (Phase 2) ────────────────
+    sch_a: dict = Field(
+        default_factory=dict,
+        description=(
+            "NRA Schedule A result: state_local_income_tax (capped at $10k), "
+            "charitable_cash, charitable_noncash, casualty_disaster_loss, "
+            "other_itemized, total, disallowed_items[]. Populated by "
+            ":func:`src.functions.sch_a_nra.compute_sch_a_nra`."
+        ),
+    )
+
     # ── Assembly metadata ──────────────────────────────────────────────
     forms_required: List[str] = Field(
         default_factory=list,

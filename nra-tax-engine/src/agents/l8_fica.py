@@ -47,9 +47,10 @@ class FicaAgent:
         current_state.fica.is_exempt = result["is_exempt"]
         current_state.fica.incorrect_ss_withheld = result["incorrect_ss_withheld"]
         current_state.fica.incorrect_medicare_withheld = result["incorrect_medicare_withheld"]
-        
-        # Trigger Document Assembly flag
+
+        # Persist the 843 requirement on state and mirror to forms_required.
         requires_843 = result.get("requires_form_843", False)
+        current_state.fica.requires_form_843 = requires_843
         if requires_843 and "843" not in current_state.forms_required:
             current_state.forms_required.append("843")
 

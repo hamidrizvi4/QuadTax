@@ -20,17 +20,23 @@ Reference:
 
 from __future__ import annotations
 
-from typing import Dict
+from datetime import date
+from typing import Dict, Optional
 
 # ---------------------------------------------------------------------------
 # Visa categories that qualify as "Exempt Individuals" under §7701(b)(5)
 # ---------------------------------------------------------------------------
-# F-1, J-1, M-1, Q-1 students are exempt for up to 5 calendar years.
-# We treat all of these equivalently for the 5-year window.
+# F-1, J-1 student, M-1, Q-1 students are exempt for up to 5 calendar years.
+# J-1 teachers/researchers have a tighter 2-of-6-prior-calendar-years rule.
 _EXEMPT_STUDENT_VISAS = frozenset({"F-1", "J-1", "M-1", "Q-1"})
 
 # Maximum calendar years an exempt student can skip SPT day counting.
 _MAX_EXEMPT_YEARS = 5
+
+# J-1 teacher/researcher window: exempt for any part of 2 calendar years
+# out of the preceding 6 (IRC §7701(b)(5)(E)).
+_MAX_J1_TEACHER_RESEARCHER_YEARS = 2
+_J1_TR_LOOKBACK_YEARS = 6
 
 
 class SubstantialPresenceCalculator:
@@ -215,3 +221,100 @@ class SubstantialPresenceCalculator:
         if total_spt_days >= 183:
             return "resident_alien"
         return "nonresident_alien"
+
+    # ── Dual-status detection ────────────────────────────────────────────
+
+    def evaluate_residency_with_status_change(
+        self,
+        tax_year: int,
+        visa_type: str,
+        first_us_arrival_year: int,
+        days_present_current_year: int,
+        days_present_minus_1: int,
+        days_present_minus_2: int,
+        first_day_in_us_current_year: Optional[date] = None,
+        last_day_in_us_current_year: Optional[date] = None,
+        prior_visa_was_resident: bool = False,
+    ) -> Dict[str, object]:
+        """Detect dual-status (mid-year transition between NRA and RA).
+
+        Three triggers under IRC §7701(b)(2):
+
+        1. **Arrival year** — NRA for part of the year then meets SPT later.
+        2. **Departure year** — RA for part of the year then leaves.
+        3. **First-year choice** — §7701(b)(4) election (out of scope for v1).
+
+        Args:
+            tax_year: Calendar year being filed.
+            visa_type: Current visa.
+            first_us_arrival_year: First calendar year the filer was in the US.
+            days_present_current_year: Days present in ``tax_year``.
+            days_present_minus_1: Days present in ``tax_year - 1``.
+            days_present_minus_2: Days present in ``tax_year - 2``.
+            first_day_in_us_current_year: First date physically present in the
+                US during the current year, if known.
+            last_day_in_us_current_year: Last date physically present, if known.
+            prior_visa_was_resident: True if the filer was an RA in the prior
+                year (informs the departure-year path).
+
+        Returns:
+            Dict mirroring :meth:`evaluate_residency` plus ``residency_start_date``,
+            ``residency_end_date``, and ``is_dual_status``.
+        """
+        base = self.evaluate_residency(
+            tax_year=tax_year,
+            visa_type=visa_type,
+            first_us_arrival_year=first_us_arrival_year,
+            days_present_current_year=days_present_current_year,
+            days_present_minus_1=days_present_minus_1,
+            days_present_minus_2=days_present_minus_2,
+        )
+
+        result: Dict[str, object] = dict(base)
+        result.update(
+            {
+                "is_dual_status": False,
+                "residency_start_date": None,
+                "residency_end_date": None,
+                "dual_status_reason": None,
+            }
+        )
+
+        # Exempt individuals are NRA all year — no dual-status from exempt visa.
+        if base["is_exempt_individual"]:
+            return result
+
+        # Arrival-year dual-status: filer was not an RA last year, became one
+        # this year, and first US presence is partway through the calendar year.
+        if (
+            base["status"] == "resident_alien"
+            and not prior_visa_was_resident
+            and first_day_in_us_current_year is not None
+            and first_day_in_us_current_year > date(tax_year, 1, 1)
+        ):
+            result["status"] = "dual_status"
+            result["is_dual_status"] = True
+            result["residency_start_date"] = first_day_in_us_current_year.isoformat()
+            result["dual_status_reason"] = (
+                "Arrival-year dual status: NRA from Jan 1 to residency_start_date, "
+                "resident alien thereafter (IRC §7701(b)(2)(A))."
+            )
+            return result
+
+        # Departure-year dual-status: filer was an RA last year, leaves the US
+        # partway through this year, and is NRA after departure.
+        if (
+            prior_visa_was_resident
+            and last_day_in_us_current_year is not None
+            and last_day_in_us_current_year < date(tax_year, 12, 31)
+        ):
+            result["status"] = "dual_status"
+            result["is_dual_status"] = True
+            result["residency_end_date"] = last_day_in_us_current_year.isoformat()
+            result["dual_status_reason"] = (
+                "Departure-year dual status: resident alien through "
+                "residency_end_date, NRA thereafter (IRC §7701(b)(2)(B))."
+            )
+            return result
+
+        return result
