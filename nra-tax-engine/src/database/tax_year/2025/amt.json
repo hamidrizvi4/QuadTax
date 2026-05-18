@@ -1,0 +1,32 @@
+{
+  "_description": "TY2025 Alternative Minimum Tax (AMT) parameters under IRC §55. AMT rarely binds for NRA students with low income but must be checked for full Form 6251 compliance. Source: IRS Rev. Proc. 2024-40 Section 3.10.",
+  "_tax_year": 2025,
+  "_source": "IRS Rev. Proc. 2024-40, Section 3.10",
+  "exemption": {
+    "single": 88100,
+    "mfs": 68650,
+    "mfj": 137000,
+    "qss": 137000,
+    "hoh": 88100
+  },
+  "phaseout_threshold": {
+    "_note": "AMT exemption phases out by 25 cents for every $1 of AMTI above threshold.",
+    "single": 626350,
+    "mfs": 626350,
+    "mfj": 1252700,
+    "qss": 1252700,
+    "hoh": 626350
+  },
+  "rate_kink": {
+    "_note": "AMTI below the kink is taxed at 26%; above is taxed at 28%.",
+    "single": 239100,
+    "mfs": 119550,
+    "mfj": 239100,
+    "qss": 239100,
+    "hoh": 239100
+  },
+  "rates": {
+    "lower": 0.26,
+    "upper": 0.28
+  }
+}

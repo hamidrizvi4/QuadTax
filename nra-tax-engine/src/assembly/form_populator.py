@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from pypdf import PdfReader, PdfWriter
+from pypdf.generic import NameObject, NumberObject
 
 from src.orchestrator.state import ReturnStateObject
 

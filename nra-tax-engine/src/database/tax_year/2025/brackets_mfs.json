@@ -1,0 +1,15 @@
+{
+  "_description": "TY2025 IRS graduated tax brackets — Married Filing Separately. Relevant for NRA filers with a US-resident-alien spouse who is not making the IRC §6013(g) election. NRAs cannot file MFJ except via §6013(g) and cannot file HOH. Source: IRS Rev. Proc. 2024-40 (October 2024).",
+  "_tax_year": 2025,
+  "_filing_status": "mfs",
+  "_source": "IRS Rev. Proc. 2024-40, Section 3.01, Table 4",
+  "brackets": [
+    { "rate": 0.10, "min": 0,       "up_to": 11925,  "base_tax": 0 },
+    { "rate": 0.12, "min": 11925,   "up_to": 48475,  "base_tax": 1192.50 },
+    { "rate": 0.22, "min": 48475,   "up_to": 103350, "base_tax": 5578.50 },
+    { "rate": 0.24, "min": 103350,  "up_to": 197300, "base_tax": 17651.00 },
+    { "rate": 0.32, "min": 197300,  "up_to": 250525, "base_tax": 40199.00 },
+    { "rate": 0.35, "min": 250525,  "up_to": 375800, "base_tax": 57231.00 },
+    { "rate": 0.37, "min": 375800,  "up_to": null,   "base_tax": 101077.25 }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "_description": "TY2025 IRS standard deduction amounts by filing status. NRAs CANNOT claim the standard deduction unless they are a student/business apprentice from India claiming benefits under US-India Tax Treaty Article 21(2). All other NRA filers must use itemized deductions on Schedule A (1040-NR) or take $0 deduction. Source: IRS Rev. Proc. 2024-40 Section 3.13.",
+  "_tax_year": 2025,
+  "_source": "IRS Rev. Proc. 2024-40, Section 3.13",
+  "amounts": {
+    "single": 15000,
+    "mfs": 15000,
+    "mfj": 30000,
+    "qss": 30000,
+    "hoh": 22500
+  },
+  "nra_rules": {
+    "_note": "NRAs generally get $0 standard deduction. Exception: India treaty Article 21(2) allows student/business apprentice from India to claim the single-status standard deduction.",
+    "nra_default": 0,
+    "nra_india_treaty_amount_by_status": {
+      "single": 15000,
+      "mfs": 15000
+    }
+  },
+  "additional_amounts": {
+    "_note": "Additional standard deduction for age 65+ or blind. Most NRA students are <65 and not blind; included for completeness.",
+    "age_or_blind_single": 2000,
+    "age_or_blind_mfs": 1600,
+    "age_or_blind_mfj_each": 1600
+  }
+}
