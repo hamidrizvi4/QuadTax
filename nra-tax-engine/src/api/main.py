@@ -54,6 +54,14 @@ class TaxProcessResponse(BaseModel):
     federal_packet_path: Optional[str] = None
     ny_packet_path: Optional[str] = None
     fica_packet_path: Optional[str] = None
+    requires_human_review: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Reasons a CPA must review the return before filing. Non-empty "
+            "when a validator or LLM confidence check flagged something. "
+            "Pass force_assembly=True on a subsequent call to override after review."
+        ),
+    )
 
 
 app = FastAPI(
@@ -88,6 +96,15 @@ class SubmitRequest(BaseModel):
     w2_ocr_texts: List[str] = Field(default_factory=list)
     form_1042s_ocr_texts: List[str] = Field(default_factory=list)
     output_dir: str = Field(default="outputs", description="Directory to write packets into.")
+    force_assembly: bool = Field(
+        default=False,
+        description=(
+            "When True the engine bypasses the human-review gate. The caller "
+            "is acknowledging every reason previously surfaced in "
+            "``requires_human_review``. Default False — first request returns "
+            "the review list without producing forms."
+        ),
+    )
 
 
 @app.get("/api/v1/healthz", tags=["meta"])
@@ -101,7 +118,7 @@ def submit(request: SubmitRequest) -> TaxProcessResponse:
     router = MCQRouter()
     mcq_dict = router.to_mcq_answers(request.intake)
 
-    engine = TaxEngine()
+    engine = TaxEngine(force_assembly=request.force_assembly)
     try:
         generated_forms, state = engine.run_full_pipeline(
             i94_ocr_text=request.i94_ocr_text,
@@ -148,6 +165,7 @@ def submit(request: SubmitRequest) -> TaxProcessResponse:
             if package.fica_843
             else None
         ),
+        requires_human_review=list(state.requires_human_review),
     )
 
 

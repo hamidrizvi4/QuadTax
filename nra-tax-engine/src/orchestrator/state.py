@@ -566,6 +566,35 @@ class ReturnStateObject(BaseModel):
         ge=2024,
         description="Calendar year the return is for (e.g., 2025 for returns filed in 2026).",
     )
+    filing_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Opaque identifier for this filing — used to name audit log files "
+            "and resume in-progress returns. Set by the orchestrator or API."
+        ),
+    )
+
+    # ── Phase-7 reliability surface ───────────────────────────────────
+    audit_trail: List[dict] = Field(
+        default_factory=list,
+        description=(
+            "Chronological list of AuditEntry dicts (layer, function, "
+            "timestamp, inputs/outputs hashes, rationale). Mutated by "
+            ":func:`src.orchestrator.audit.record`. Drives the 'Why this "
+            "number?' UI and IRS-notice response workflow."
+        ),
+    )
+    requires_human_review: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Human-readable reasons why a CPA must review the return before "
+            "filing. Populated by post-layer validators in "
+            ":mod:`src.orchestrator.validators` and by the LLM safety wrapper. "
+            "The engine refuses to set ``ready_for_assembly=True`` while "
+            "this list is non-empty unless the API caller explicitly "
+            "acknowledges each item."
+        ),
+    )
 
     # ── Withholding reconciliation report (Phase 2) ───────────────────
     withholding_report: dict = Field(
