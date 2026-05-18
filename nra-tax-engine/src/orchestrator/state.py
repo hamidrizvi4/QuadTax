@@ -187,8 +187,11 @@ class TreatyState(BaseModel):
     """L6 (part 1) — Tax treaty application results.
 
     Captures whether the individual's country of tax residence has an
-    income tax treaty with the US and, if so, which article exempts
-    a portion of their income.
+    income tax treaty with the US and, if so, which article(s) exempt
+    a portion of their income. Multi-article countries (China, India, Korea,
+    etc.) populate ``applied_benefits`` with one entry per matching article;
+    the scalar fields below remain for backward compatibility and reflect
+    the *primary* (largest-exemption) benefit.
     """
 
     is_eligible: bool = Field(
@@ -208,17 +211,17 @@ class TreatyState(BaseModel):
         description=(
             "ISO 3166-1 alpha-2 country code of the treaty partner country "
             "(e.g. 'IN' for India, 'CN' for China, 'KR' for South Korea). "
-            "Looked up in database/treaties.json. None if no treaty applies."
+            "Looked up in database/tax_year/<year>/treaties/. None if no treaty applies."
         ),
     )
 
     article_number: Optional[str] = Field(
         default=None,
         description=(
-            "The specific treaty article that grants the exemption, "
-            "e.g. '21(2)' for India's student wage exemption or '20(b)' for "
-            "China's $5,000 student services exemption. None if no treaty "
-            "benefit is claimed."
+            "The specific treaty article that grants the primary exemption, "
+            "e.g. '21(2)' for India's standard-deduction equivalent or '20(b)' "
+            "for China's scholarship exemption. Reflects the article tied to "
+            "the largest applied exempt amount."
         ),
     )
 
@@ -226,19 +229,36 @@ class TreatyState(BaseModel):
         default=0.0,
         ge=0.0,
         description=(
-            "Dollar amount of income actually exempted under the treaty "
-            "article for this tax year. For example, under the India treaty "
-            "Article 21(2), up to $5,000 of student wages may be exempt. "
-            "This value is subtracted from gross income before applying "
-            "graduated tax brackets."
+            "Total dollar amount of income exempted under treaty article(s) "
+            "for this tax year, summed across all matching articles. "
+            "Subtracted from gross income before applying graduated tax brackets."
         ),
     )
 
     applied_to_category: Optional[str] = Field(
         default=None,
         description=(
-            "The category the treaty applies to, e.g., 'scholarship' or 'teaching_research', "
-            "so L6 knows which income bucket to deduct from."
+            "Primary treaty category, e.g. 'scholarship_fellowship', "
+            "'student_personal_services', 'teaching_research'."
+        ),
+    )
+
+    applied_benefits: List[dict] = Field(
+        default_factory=list,
+        description=(
+            "Per-article list of applied benefits. Each entry has keys: "
+            "country_iso2, country_name, article_id, category, exempt_amount, "
+            "rate_override, applies_after_saving_clause, requires_form_8833, explanation. "
+            "Multi-article countries (China, India) will have multiple entries."
+        ),
+    )
+
+    requires_form_8833: bool = Field(
+        default=False,
+        description=(
+            "True if any applied benefit triggers a Form 8833 disclosure "
+            "under IRC §6114, considering per-article thresholds and the "
+            "Notice 2010-21 exception. Drives forms_required population."
         ),
     )
 

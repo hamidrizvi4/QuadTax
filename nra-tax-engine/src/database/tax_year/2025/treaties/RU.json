@@ -1,0 +1,16 @@
+{
+  "country_name": "Russia",
+  "iso2": "RU",
+  "treaty_in_force": false,
+  "treaty_effective_date": "1992-12-16",
+  "saving_clause": {
+    "exists": true,
+    "cite": null,
+    "exception_paragraph": null
+  },
+  "articles": [],
+  "notes": [
+    "TREATY SUSPENDED. Russia notified the US in 2023 of partial suspension; the US Treasury announced on June 17, 2024 that Articles 1, 5-21, and 23 are suspended by mutual agreement beginning August 16, 2024. For TY2025, treat as no benefits available for new claims."
+  ],
+  "verified_against_pub901": false
+}

@@ -1,56 +1,133 @@
-"""Tests for the L6 Tax Calculation Agent."""
+"""Tests for the L6 Tax Calculation Agent (Phase 1: multi-benefit treaty application)."""
 
 from unittest.mock import patch
-import pytest
 
 from src.agents.l6_tax_calc import TaxCalculationAgent
 from src.orchestrator.state import ReturnStateObject
 
 
 class TestTaxCalculationAgent:
-    """Test suite for the deterministic L6 wrapper."""
-
     @patch("src.agents.l6_tax_calc.TaxCalculator")
-    def test_process_tax_applies_exemptions(self, MockCalculator):
-        """Verify the agent subtracts treaty exemptions before calling the math engine."""
-        
-        # Setup the mock to check its call arguments later
+    def test_process_tax_subtracts_eci_benefit(self, MockCalculator):
+        """L6 subtracts a $5k teaching_research treaty benefit from ECI before bracket math."""
         mock_instance = MockCalculator.return_value
         mock_instance.calculate_tax_liability.return_value = {
             "eci_tax_liability": 2761.0,
             "fdap_tax_liability": 1400.0,
-            "total_tax_liability": 4161.0
+            "total_tax_liability": 4161.0,
         }
 
-        # Setup Dummy State
         state = ReturnStateObject()
-        
-        # Base Income
         state.income.eci_taxable_total = 30000.0
         state.income.fdap_taxable_total = 10000.0
-        
-        # Treaty Setup
-        state.treaty.is_eligible = True
-        state.treaty.applied_to_category = "teaching_research" # Deduct from ECI!
-        state.treaty.exempt_amount_applied = 5000.0
-        
-        # FDAP Rules - Assume F-1 getting remainder taxed at 14%
         state.residency.exempt_visa_type = "F-1"
+        state.treaty.is_eligible = True
+        state.treaty.applied_to_category = "teaching_research"
+        state.treaty.exempt_amount_applied = 5000.0
+        state.treaty.applied_benefits = [
+            {
+                "country_iso2": "CN",
+                "country_name": "China",
+                "article_id": "19",
+                "category": "teaching_research",
+                "exempt_amount": 5000.0,
+                "rate_override": None,
+                "applies_after_saving_clause": False,
+                "requires_form_8833": True,
+                "explanation": "test",
+            }
+        ]
 
-        # Execute
         agent = TaxCalculationAgent()
-        updated_state = agent.process_tax(current_state=state)
+        updated = agent.process_tax(current_state=state)
 
-        # Assertions
-        # math: 30000 ECI - 5000 Treaty = 25000 ECI handed off to Calculator
-        # math: 10000 FDAP remains untouched by this particular treaty
+        # ECI was reduced from $30,000 to $25,000; FDAP untouched; F-1 → 14% FDAP rate.
         mock_instance.calculate_tax_liability.assert_called_once_with(
             eci_taxable_income=25000.0,
             fdap_taxable_income=10000.0,
-            fdap_rate=0.14
+            fdap_rate=0.14,
+        )
+        assert updated.tax.eci_tax_liability == 2761.0
+        assert updated.tax.total_tax_liability == 4161.0
+        assert "L6" in updated.completed_layers
+
+    @patch("src.agents.l6_tax_calc.TaxCalculator")
+    def test_process_tax_india_standard_deduction(self, MockCalculator):
+        """India Art 21(2) applies the single-status standard deduction ($15k for TY2025)."""
+        mock_instance = MockCalculator.return_value
+        mock_instance.calculate_tax_liability.return_value = {
+            "eci_tax_liability": 500.0,
+            "fdap_tax_liability": 0.0,
+            "total_tax_liability": 500.0,
+        }
+
+        state = ReturnStateObject()
+        state.income.eci_taxable_total = 20000.0
+        state.income.fdap_taxable_total = 0.0
+        state.residency.exempt_visa_type = "F-1"
+        state.treaty.is_eligible = True
+        state.treaty.applied_to_category = "student_personal_services"
+        state.treaty.exempt_amount_applied = 20000.0  # max-cap-less benefit
+        state.treaty.applied_benefits = [
+            {
+                "country_iso2": "IN",
+                "country_name": "India",
+                "article_id": "21(2)",
+                "category": "student_personal_services",
+                "exempt_amount": 20000.0,
+                "rate_override": None,
+                "applies_after_saving_clause": False,
+                "requires_form_8833": True,
+                "explanation": "India standard deduction equivalent",
+            }
+        ]
+
+        agent = TaxCalculationAgent()
+        agent.process_tax(current_state=state)
+
+        # India 21(2) does NOT exempt wages; instead the $15,000 single standard
+        # deduction is subtracted: $20,000 − $15,000 = $5,000.
+        mock_instance.calculate_tax_liability.assert_called_once_with(
+            eci_taxable_income=5000.0,
+            fdap_taxable_income=0.0,
+            fdap_rate=0.30,
         )
 
-        # Assert State was mutated with the hypothetical test outcomes
-        assert updated_state.tax.eci_tax_liability == 2761.0
-        assert updated_state.tax.total_tax_liability == 4161.0
-        assert "L6" in updated_state.completed_layers
+    @patch("src.agents.l6_tax_calc.TaxCalculator")
+    def test_process_tax_fdap_zeroed_treaty_yields_zero_rate(self, MockCalculator):
+        """When treaty exempts ALL FDAP scholarship, the effective FDAP rate goes to 0%."""
+        mock_instance = MockCalculator.return_value
+        mock_instance.calculate_tax_liability.return_value = {
+            "eci_tax_liability": 0.0,
+            "fdap_tax_liability": 0.0,
+            "total_tax_liability": 0.0,
+        }
+
+        state = ReturnStateObject()
+        state.income.fdap_taxable_total = 22000.0
+        state.residency.exempt_visa_type = "F-1"
+        state.treaty.is_eligible = True
+        state.treaty.applied_to_category = "scholarship_fellowship"
+        state.treaty.exempt_amount_applied = 22000.0
+        state.treaty.applied_benefits = [
+            {
+                "country_iso2": "CN",
+                "country_name": "China",
+                "article_id": "20(b)",
+                "category": "scholarship_fellowship",
+                "exempt_amount": 22000.0,
+                "rate_override": 0.0,
+                "applies_after_saving_clause": False,
+                "requires_form_8833": True,
+                "explanation": "Full scholarship exemption",
+            }
+        ]
+
+        agent = TaxCalculationAgent()
+        agent.process_tax(current_state=state)
+
+        mock_instance.calculate_tax_liability.assert_called_once_with(
+            eci_taxable_income=0.0,
+            fdap_taxable_income=0.0,
+            fdap_rate=0.0,
+        )

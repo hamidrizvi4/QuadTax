@@ -7,10 +7,10 @@ It reads year-keyed bracket tables from ``src/database/tax_year/<year>/`` via
 
 Backward compatibility:
     Callers that omit ``tax_year`` and ``filing_status`` will get TY2025 single
-    filer brackets — the same data the legacy ``database/tax_brackets.json``
-    file held. Phase 2 of the production-readiness plan migrates monetary
-    values to :class:`decimal.Decimal`; for now float-with-explicit-round
-    matches IRS rounding ("nearest whole dollar").
+    filer brackets — the same data the year-keyed JSON files now hold. Phase 2
+    of the production-readiness plan migrates monetary values to
+    :class:`decimal.Decimal`; for now float-with-explicit-round matches IRS
+    rounding ("nearest whole dollar").
 """
 
 from __future__ import annotations
