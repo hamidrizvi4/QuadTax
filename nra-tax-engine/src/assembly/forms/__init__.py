@@ -23,12 +23,16 @@ from src.assembly.forms import (
     form_8833,
     form_8843,
     form_w7,
+    it_203,
+    it_203b,
+    it_203d,
     schedule_a,
     schedule_nec,
     schedule_oi,
 )
 
 FORM_REGISTRY: Dict[str, Callable[..., dict]] = {
+    # Federal
     "1040-NR": form_1040nr.compute_field_map,
     "Schedule-OI": schedule_oi.compute_field_map,
     "Schedule-NEC": schedule_nec.compute_field_map,
@@ -39,6 +43,10 @@ FORM_REGISTRY: Dict[str, Callable[..., dict]] = {
     "W-7": form_w7.compute_field_map,
     "6251": form_6251.compute_field_map,
     "2210": form_2210.compute_field_map,
+    # New York
+    "IT-203": it_203.compute_field_map,
+    "IT-203-B": it_203b.compute_field_map,
+    "IT-203-D": it_203d.compute_field_map,
 }
 
 

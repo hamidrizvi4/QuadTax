@@ -24,6 +24,7 @@ from src.agents.l4_treaty import TreatyAgent
 from src.agents.l6_tax_calc import TaxCalculationAgent
 from src.agents.l7_credits import CreditsAgent
 from src.agents.l8_fica import FicaAgent
+from src.agents.l9_ny import NYAgent
 from src.assembly.form_populator import FormPopulator
 from src.functions import estimated_tax_penalty as etp_module
 from src.functions import itin_eligibility as itin_module
@@ -44,12 +45,14 @@ LAYER_DEPENDENCIES: Dict[str, List[str]] = {
     "L6": ["L1", "L3", "L4"],
     "L7": ["L6"],
     "L8": ["L1", "L3"],
+    "L9": ["L7", "L8"],
 }
 
 # Layers that must be present in ``completed_layers`` before the engine will
 # advance to assembly. L4 is treated as satisfied either by completing
 # ("L4") or by an explicit skip ("L4_Skipped") for resident-alien cases.
-REQUIRED_LAYERS_FOR_ASSEMBLY: List[str] = ["L1", "L3", "L4", "L6", "L7", "L8"]
+# L9 (NY) is treated as satisfied by either "L9" or "L9_Skipped".
+REQUIRED_LAYERS_FOR_ASSEMBLY: List[str] = ["L1", "L3", "L4", "L6", "L7", "L8", "L9"]
 
 
 class TaxEngine:
@@ -85,6 +88,10 @@ class TaxEngine:
     def _l4_satisfied(self, state: ReturnStateObject) -> bool:
         """L4 is satisfied if it completed normally or was explicitly skipped."""
         return "L4" in state.completed_layers or "L4_Skipped" in state.completed_layers
+
+    def _l9_satisfied(self, state: ReturnStateObject) -> bool:
+        """L9 is satisfied if it completed normally or was explicitly skipped."""
+        return "L9" in state.completed_layers or "L9_Skipped" in state.completed_layers
 
     def _compute_phase3_addons(self, state: ReturnStateObject) -> None:
         """Run AMT, ITIN, and estimated-tax-penalty evaluations and mutate state."""
@@ -207,14 +214,27 @@ class TaxEngine:
         fica_agent = FicaAgent()
         state = fica_agent.process_fica(current_state=state)
 
+        # L9 — NY pipeline. Runs only when ny_intake is provided OR when the
+        # filer's US address is in NY; otherwise marked as skipped so the
+        # assembly gate is still satisfied for non-NY filers.
+        ny_intake = mcq_answers.get("ny_intake")
+        if ny_intake is not None or state.identity.us_state == "NY":
+            self.check_dependencies("L9", state)
+            ny_agent = NYAgent()
+            state = ny_agent.process_ny(current_state=state, ny_intake=ny_intake)
+        else:
+            state.mark_layer_complete("L9_Skipped")
+
         # Phase 3 post-tax computations: AMT, ITIN, estimated-tax penalty.
         self._compute_phase3_addons(state)
 
         # Pre-assembly validation
         completed = set(state.completed_layers)
-        # Treat L4 as satisfied by either of its two terminal markers.
+        # Treat L4 / L9 as satisfied by either of their two terminal markers.
         if self._l4_satisfied(state):
             completed.add("L4")
+        if self._l9_satisfied(state):
+            completed.add("L9")
         missing = [layer for layer in REQUIRED_LAYERS_FOR_ASSEMBLY if layer not in completed]
         if missing:
             raise OrchestrationError(

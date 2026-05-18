@@ -393,6 +393,60 @@ class FicaState(BaseModel):
     )
 
 
+class NYTaxState(BaseModel):
+    """L9 — New York state, NYC, and Yonkers tax results.
+
+    NY runs its own residency test (separate from federal SPT) and does NOT
+    honor federal tax treaties — federal treaty exemptions are added back to
+    NY taxable income.
+    """
+
+    residency_status: Literal["resident", "part_year", "nonresident", "pending"] = Field(
+        default="pending",
+        description=(
+            "NY residency classification under NY Tax Law §605. 'nonresident' "
+            "is the default for F-1 students living in dorms (Knight case)."
+        ),
+    )
+    residency_reason: str = Field(
+        default="",
+        description="Plain-English explanation of why this status was chosen.",
+    )
+    days_in_ny: int = Field(default=0, ge=0, le=366)
+    nyc_resident: bool = Field(default=False)
+    yonkers_resident: bool = Field(default=False)
+
+    ny_source_wages: float = Field(default=0.0, ge=0.0)
+    ny_source_1042s_gross: float = Field(default=0.0, ge=0.0)
+    ny_source_income: float = Field(default=0.0, ge=0.0)
+    ny_income_percentage: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    ny_agi: float = Field(default=0.0, ge=0.0)
+    ny_treaty_addback: float = Field(default=0.0, ge=0.0)
+    ny_standard_deduction: float = Field(default=0.0, ge=0.0)
+    ny_taxable_income: float = Field(default=0.0, ge=0.0)
+    ny_tax_resident_basis: float = Field(default=0.0, ge=0.0)
+    ny_tax_apportioned: float = Field(default=0.0, ge=0.0)
+    nyc_tax: float = Field(default=0.0, ge=0.0)
+    yonkers_tax: float = Field(default=0.0, ge=0.0)
+    total_ny_state_local: float = Field(default=0.0, ge=0.0)
+
+    ny_withholding: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="NY state income tax withheld (W-2 Box 17 totals).",
+    )
+    nyc_withholding: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="NYC / locality income tax withheld (W-2 Box 19 totals).",
+    )
+    ny_refund_or_owed: float = Field(
+        default=0.0,
+        description="Positive = filer owes NY; negative = NY refund.",
+    )
+
+
 class TaxCalculatedState(BaseModel):
     """L6 (part 2) — Final tax liability computation results.
 
@@ -500,6 +554,10 @@ class ReturnStateObject(BaseModel):
     tax: TaxCalculatedState = Field(
         default_factory=TaxCalculatedState,
         description="L6 output (part 2): computed tax liability and refund.",
+    )
+    ny: NYTaxState = Field(
+        default_factory=NYTaxState,
+        description="L9 output: NY state, NYC, and Yonkers tax results.",
     )
 
     # ── Pipeline-level constants ──────────────────────────────────────
