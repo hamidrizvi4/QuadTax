@@ -25,6 +25,9 @@ from src.agents.l6_tax_calc import TaxCalculationAgent
 from src.agents.l7_credits import CreditsAgent
 from src.agents.l8_fica import FicaAgent
 from src.assembly.form_populator import FormPopulator
+from src.functions import estimated_tax_penalty as etp_module
+from src.functions import itin_eligibility as itin_module
+from src.functions.amt_calculator import AMTCalculator
 from src.orchestrator.state import ReturnStateObject
 
 
@@ -83,6 +86,50 @@ class TaxEngine:
         """L4 is satisfied if it completed normally or was explicitly skipped."""
         return "L4" in state.completed_layers or "L4_Skipped" in state.completed_layers
 
+    def _compute_phase3_addons(self, state: ReturnStateObject) -> None:
+        """Run AMT, ITIN, and estimated-tax-penalty evaluations and mutate state."""
+        # AMT — taxable income approximated as eci_taxable_total − exempt; this
+        # is a sound first-pass for student returns. A future revision will use
+        # the precise Form 1040-NR line 15 figure once the populator emits it.
+        taxable = max(
+            0.0,
+            float(state.income.eci_taxable_total) - float(state.treaty.exempt_amount_applied),
+        )
+        amt = AMTCalculator(tax_year=state.tax_year).compute(
+            taxable_income=taxable,
+            regular_tax=float(state.tax.eci_tax_liability),
+            filing_status=state.identity.filing_status,
+        )
+        state.amt = amt.to_dict_floats()
+        if amt.binds and "6251" not in state.forms_required:
+            state.forms_required.append("6251")
+
+        # ITIN — drive Form W-7 when no SSN.
+        ident = state.identity
+        has_ssn = bool(ident.ssn)
+        has_itin = bool(ident.itin)
+        itin_result = itin_module.evaluate(
+            has_ssn=has_ssn,
+            has_existing_itin=has_itin,
+            is_student=(state.residency.exempt_visa_type or "").upper()
+            in {"F-1", "J-1", "M-1", "Q-1"},
+            claiming_treaty_benefit=state.treaty.is_eligible,
+            current_tax_year=state.tax_year,
+        )
+        state.itin_eligibility = itin_result.to_dict()
+        ident.requires_w7_application = itin_result.needs_w7
+        if itin_result.needs_w7 and "W-7" not in state.forms_required:
+            state.forms_required.append("W-7")
+
+        # Estimated tax penalty — surface Form 2210 attachment if no safe harbor.
+        penalty_result = etp_module.evaluate(
+            current_year_total_tax=float(state.tax.total_tax_liability),
+            total_withholding_and_estimated=float(state.tax.total_withholding_credits),
+        )
+        state.estimated_tax_penalty = penalty_result.to_dict_floats()
+        if penalty_result.must_attach_form_2210 and "2210" not in state.forms_required:
+            state.forms_required.append("2210")
+
     def run_full_pipeline(
         self,
         i94_ocr_text: str,
@@ -102,6 +149,7 @@ class TaxEngine:
             Tuple of ``(generated_pdf_paths, final_state)``.
         """
         state = ReturnStateObject()
+        state.tax_year = mcq_answers["tax_year"]
 
         tax_year = mcq_answers["tax_year"]
         visa_type = mcq_answers["visa_type"]
@@ -159,6 +207,9 @@ class TaxEngine:
         fica_agent = FicaAgent()
         state = fica_agent.process_fica(current_state=state)
 
+        # Phase 3 post-tax computations: AMT, ITIN, estimated-tax penalty.
+        self._compute_phase3_addons(state)
+
         # Pre-assembly validation
         completed = set(state.completed_layers)
         # Treat L4 as satisfied by either of its two terminal markers.
@@ -174,7 +225,7 @@ class TaxEngine:
         state.ready_for_assembly = True
 
         # L9 — Assembly
-        populator = FormPopulator()
+        populator = FormPopulator(tax_year=state.tax_year)
         generated_paths = populator.generate_filing_package(current_state=state)
 
         return generated_paths, state

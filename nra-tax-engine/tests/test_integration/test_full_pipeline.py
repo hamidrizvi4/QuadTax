@@ -79,9 +79,9 @@ class TestFullPipelineIntegrity:
 
         # 2. Setup Mock App Params
         mcq_answers = {
-            "tax_year": 2024,
+            "tax_year": 2025,
             "visa_type": "F-1",
-            "first_us_arrival_year": 2023,
+            "first_us_arrival_year": 2024,
             "tax_residence_country": "China",
             "income_description": "PhD TA",
             "requires_services": True,

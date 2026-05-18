@@ -26,6 +26,83 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
+class TaxpayerIdentityState(BaseModel):
+    """Demographic and identifier fields required by every IRS form.
+
+    Populated from the intake/MCQ layer. Each field maps to one or more
+    AcroForm fields across the federal forms.
+    """
+
+    first_name: str = Field(default="", description="Legal first name as on passport.")
+    middle_initial: str = Field(default="", description="Middle initial, blank if none.")
+    last_name: str = Field(default="", description="Legal last (family) name.")
+    suffix: str = Field(default="", description="Jr/Sr/III, blank if none.")
+    date_of_birth: Optional[str] = Field(
+        default=None, description="ISO date (YYYY-MM-DD)."
+    )
+
+    ssn: str = Field(
+        default="",
+        description=(
+            "Social Security Number as 9 digits without dashes. Empty if the "
+            "filer has no SSN — then ``itin`` is used."
+        ),
+    )
+    itin: str = Field(
+        default="",
+        description=(
+            "Individual Taxpayer Identification Number, 9 digits without "
+            "dashes. Used when no SSN. If both are empty, Form W-7 must be "
+            "attached on the first filing."
+        ),
+    )
+    requires_w7_application: bool = Field(
+        default=False,
+        description="True when neither SSN nor ITIN is present — triggers Form W-7.",
+    )
+
+    country_of_citizenship: str = Field(default="", description="ISO2 country code.")
+    country_of_tax_residence: str = Field(
+        default="", description="ISO2 country code for treaty purposes."
+    )
+    passport_number: str = Field(default="")
+    passport_country: str = Field(default="", description="ISO2 country code.")
+
+    us_address_line1: str = Field(default="")
+    us_address_line2: str = Field(default="")
+    us_city: str = Field(default="")
+    us_state: str = Field(default="", description="2-letter US state postal code.")
+    us_zip: str = Field(default="")
+
+    foreign_address_line1: str = Field(default="")
+    foreign_address_line2: str = Field(default="")
+    foreign_city: str = Field(default="")
+    foreign_state_province: str = Field(default="")
+    foreign_country: str = Field(default="", description="ISO2 country code.")
+    foreign_postal_code: str = Field(default="")
+
+    occupation: str = Field(
+        default="Student",
+        description="Free-text occupation; appears on 1040-NR signature block.",
+    )
+    daytime_phone: str = Field(default="")
+    email: str = Field(default="")
+
+    filing_status: Literal["single", "mfs", "qss"] = Field(
+        default="single",
+        description="NRA-permitted filing status. MFJ and HOH are not allowed on 1040-NR.",
+    )
+
+    spouse_first_name: str = Field(default="")
+    spouse_last_name: str = Field(default="")
+    spouse_ssn_or_itin: str = Field(default="")
+
+    @property
+    def primary_tin(self) -> str:
+        """Return SSN if present, else ITIN, else empty string."""
+        return self.ssn or self.itin
+
+
 class ResidencyState(BaseModel):
     """L1 — Tax residency determination results.
 
@@ -400,6 +477,10 @@ class ReturnStateObject(BaseModel):
     """
 
     # ── Processing layer sub-models ────────────────────────────────────
+    identity: TaxpayerIdentityState = Field(
+        default_factory=TaxpayerIdentityState,
+        description="Demographic and identifier fields (intake-populated).",
+    )
     residency: ResidencyState = Field(
         default_factory=ResidencyState,
         description="L1 output: tax residency determination.",
@@ -419,6 +500,13 @@ class ReturnStateObject(BaseModel):
     tax: TaxCalculatedState = Field(
         default_factory=TaxCalculatedState,
         description="L6 output (part 2): computed tax liability and refund.",
+    )
+
+    # ── Pipeline-level constants ──────────────────────────────────────
+    tax_year: int = Field(
+        default=2025,
+        ge=2024,
+        description="Calendar year the return is for (e.g., 2025 for returns filed in 2026).",
     )
 
     # ── Withholding reconciliation report (Phase 2) ───────────────────
@@ -443,6 +531,35 @@ class ReturnStateObject(BaseModel):
             "charitable_cash, charitable_noncash, casualty_disaster_loss, "
             "other_itemized, total, disallowed_items[]. Populated by "
             ":func:`src.functions.sch_a_nra.compute_sch_a_nra`."
+        ),
+    )
+
+    # ── AMT / Form 6251 (Phase 3) ──────────────────────────────────────
+    amt: dict = Field(
+        default_factory=dict,
+        description=(
+            "Alternative Minimum Tax result: amti, exemption, "
+            "tentative_minimum_tax, regular_tax_for_amt, amt_owed, binds. "
+            "Populated by :class:`AMTCalculator`."
+        ),
+    )
+
+    # ── ITIN / Form W-7 eligibility (Phase 3) ──────────────────────────
+    itin_eligibility: dict = Field(
+        default_factory=dict,
+        description=(
+            "ITIN application/renewal result: needs_w7, reason_code, "
+            "is_renewal, explanation. Drives Form W-7 attachment."
+        ),
+    )
+
+    # ── Estimated tax penalty / Form 2210 (Phase 3) ────────────────────
+    estimated_tax_penalty: dict = Field(
+        default_factory=dict,
+        description=(
+            "Form 2210 result: safe_harbor_met, safe_harbor_reason, "
+            "penalty_amount, must_attach_form_2210. Worst-case estimate "
+            "produced by :func:`estimated_tax_penalty.evaluate`."
         ),
     )
 

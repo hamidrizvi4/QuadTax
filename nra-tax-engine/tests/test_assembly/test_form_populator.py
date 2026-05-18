@@ -1,7 +1,7 @@
-"""Tests for the Layer 9 PDF Assembly Orchestrator."""
+"""Tests for the Layer 9 Form Populator (Phase 3 architecture)."""
 
-import os
-from unittest.mock import MagicMock, patch
+import json
+from pathlib import Path
 
 import pytest
 
@@ -9,62 +9,100 @@ from src.assembly.form_populator import FormPopulator
 from src.orchestrator.state import ReturnStateObject
 
 
-class TestFormPopulator:
-    """Test suite ensuring deterministic mappings and physical file orchestration."""
+class TestFormPopulatorGate:
+    """The populator must refuse to run before the orchestrator finishes."""
 
-    def test_gatekeeper_validation(self):
-        """Ensure the populator hard-fails if the state is not fully calculated."""
-        state = ReturnStateObject()
-        state._gate_ready_for_assembly = False # Explicitly false
-
-        populator = FormPopulator()
+    def test_not_ready_for_assembly_raises(self, tmp_path):
+        state = ReturnStateObject(tax_year=2025)
+        state.ready_for_assembly = False
+        populator = FormPopulator(
+            templates_dir=str(tmp_path),
+            outputs_dir=str(tmp_path / "out"),
+            tax_year=2025,
+        )
         with pytest.raises(ValueError, match="not ready for assembly"):
             populator.generate_filing_package(state)
 
-    @patch("src.assembly.form_populator.PdfWriter")
-    @patch("src.assembly.form_populator.PdfReader")
-    @patch("os.path.exists", return_value=True)
-    def test_pdf_injection_flow(self, mock_exists, MockReader, MockWriter):
-        """Simulate the 1040-NR and 8843 assembly mapping and file generation."""
-        # Setup mocks
-        mock_writer_instance = MockWriter.return_value
-        
-        # We need a mock page for the loop `for page in writer.pages`
-        mock_page = MagicMock()
-        mock_writer_instance.pages = [mock_page]
 
-        # Construct the state explicitly bypassing normal L1-L8 mutations
-        state = ReturnStateObject()
-        state.tax.total_tax_liability = 1750.0
-        state.tax.refund_or_owed = -250.0
-        state.residency.years_in_exempt_status = 3
-        state.forms_required = ["1040-NR", "8843"]
+class TestFormPopulatorFieldMapFallback:
+    """When templates are missing, the populator writes field-map JSON files."""
+
+    def test_writes_fieldmap_json_for_missing_templates(self, tmp_path):
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.first_name = "Ming"
+        state.identity.last_name = "Chen"
+        state.identity.us_address_line1 = "123 Main St"
+        state.identity.us_city = "Boston"
+        state.identity.us_state = "MA"
+        state.identity.us_zip = "02115"
+        state.identity.country_of_citizenship = "CN"
+        state.residency.exempt_visa_type = "F-1"
+        state.residency.years_in_exempt_status = 2
+        state.residency.spt_days_current_year = 300
+        state.tax.total_tax_liability = 2762.0
+        state.tax.total_withholding_credits = 4500.0
+        state.tax.refund_or_owed = -1738.0
+        state.forms_required = ["8833", "843"]
         state.ready_for_assembly = True
 
-        # Instantiate Populator
-        populator = FormPopulator(templates_dir="dummy/dir", outputs_dir="dummy/out")
+        populator = FormPopulator(
+            templates_dir=str(tmp_path / "templates"),
+            outputs_dir=str(tmp_path / "out"),
+            tax_year=2025,
+        )
+        outputs = populator.generate_filing_package(state)
 
-        # Capture the mappings dynamically to test them
-        # (This validates the _get_field_mapping accuracy)
-        mapping_1040 = populator._get_field_mapping(state, "1040-NR")
-        assert mapping_1040["Line_24_Total_Tax"] == 1750.0
-        assert mapping_1040["Line_35a_Refund"] == -250.0
+        # Every output should exist as a JSON fallback because templates are absent.
+        assert len(outputs) > 0
+        json_outputs = [Path(p) for p in outputs if p.endswith(".fieldmap.json")]
+        assert len(json_outputs) == len(outputs)
 
-        mapping_8843 = populator._get_field_mapping(state, "8843")
-        assert mapping_8843["Part_III_Line_11"] == 3
+        # Core forms are always produced.
+        names = " ".join(outputs)
+        assert "1040-NR" in names
+        assert "Schedule-OI" in names
+        assert "8843" in names
+        assert "8833" in names
+        assert "843" in names
 
-        # Execute the Package Assembly
-        with patch("builtins.open", MagicMock()):
-            output_files = populator.generate_filing_package(state, output_dir="outputs/")
+        # Verify one of the fallbacks contains the expected field-map.
+        f1040 = next(p for p in json_outputs if "1040-NR" in p.name)
+        data = json.loads(f1040.read_text())
+        assert data["last_name"] == "Chen"
+        assert data["us_state"] == "MA"
+        assert data["line_24_total_tax"] == "2762"
 
-        # Assertions
-        # 1040-NR and 8843 should have been created
-        assert len(output_files) == 2
-        assert any("1040-NR" in f for f in output_files)
-        assert any("8843" in f for f in output_files)
-        
-        # The writer's actual file commitment must be invoked exactly twice
-        assert mock_writer_instance.write.call_count == 2
-        
-        # update_page_form_field_values should be called twice (once per form)
-        assert mock_writer_instance.update_page_form_field_values.call_count == 2
+
+class TestFormPopulatorScheduleInjection:
+    """Schedule-NEC is added automatically when FDAP > 0."""
+
+    def test_sch_nec_appended_when_fdap_present(self, tmp_path):
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.first_name = "X"
+        state.identity.last_name = "Y"
+        state.income.fdap_taxable_total = 5000.0
+        state.tax.fdap_tax_liability = 700.0
+        state.ready_for_assembly = True
+
+        populator = FormPopulator(
+            templates_dir=str(tmp_path / "templates"),
+            outputs_dir=str(tmp_path / "out"),
+            tax_year=2025,
+        )
+        outputs = populator.generate_filing_package(state)
+        assert any("Schedule-NEC" in p for p in outputs)
+
+    def test_sch_a_appended_when_itemized_present(self, tmp_path):
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.first_name = "X"
+        state.identity.last_name = "Y"
+        state.sch_a = {"total": 1500.0, "state_local_income_tax": 1500.0, "disallowed_items": []}
+        state.ready_for_assembly = True
+
+        populator = FormPopulator(
+            templates_dir=str(tmp_path / "templates"),
+            outputs_dir=str(tmp_path / "out"),
+            tax_year=2025,
+        )
+        outputs = populator.generate_filing_package(state)
+        assert any("Schedule-A" in p for p in outputs)

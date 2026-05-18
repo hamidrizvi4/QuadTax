@@ -1,155 +1,189 @@
-"""
-Form Populator — The Layer 9 Assembly Node.
+"""Layer 9 — PDF assembly orchestrator.
 
-Translates the finalized ReturnStateObject into absolute, flattened PDF files
-ready for submission to the IRS. Maps state values deterministically to IRS
-PDF field names.
+Iterates :attr:`ReturnStateObject.forms_required`, computes the
+field-map for each form via the per-form populators under
+:mod:`src.assembly.forms`, and writes the values into the matching IRS
+AcroForm PDF under ``assets/templates/<tax_year>/<form>.pdf``.
+
+If a template file is missing the populator writes the field-map JSON
+to disk instead so the rest of the pipeline can still produce a
+deliverable for review while the IRS PDF templates are being vendored
+(IRS publishes year-final 1040-NR PDFs in mid-November of the year).
+
+Phase 3 changes:
+    * Single-form-per-module architecture (see ``forms/``).
+    * Field-map JSON fallback when templates are absent.
+    * Form-name → form-id mapping handles aliases (Schedule-OI,
+      Schedule-NEC, Schedule-A) emitted by L4/L6/L7 layers.
 """
 
+from __future__ import annotations
+
+import json
+import logging
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import NameObject, NumberObject
 
-from src.orchestrator.state import ReturnStateObject
+from src.assembly.forms import FORM_REGISTRY
+
+if TYPE_CHECKING:
+    from src.orchestrator.state import ReturnStateObject
+
+logger = logging.getLogger(__name__)
+
+
+# Forms always attached to a 1040-NR regardless of treaty / FICA paths.
+_ALWAYS_REQUIRED = ["1040-NR", "Schedule-OI", "8843"]
 
 
 class FormPopulator:
-    """Orchestrates PDF assembly mapping state variables to IRS form fields."""
+    """Computes field-maps and writes filled PDFs (or JSON fallbacks)."""
 
     def __init__(
         self,
         templates_dir: str = "assets/templates",
         outputs_dir: str = "outputs",
+        tax_year: int = 2025,
     ):
-        """Initialize the populator with target directories.
-
-        Args:
-            templates_dir: Path where blank IRS PDFs are stored.
-            outputs_dir: Path where populated PDFs should be saved.
-        """
-        self.templates_dir = Path(templates_dir).absolute()
+        self.templates_dir = Path(templates_dir).absolute() / str(tax_year)
         self.outputs_dir = Path(outputs_dir).absolute()
-        
-        # Ensure directories exist
+        self.tax_year = tax_year
+
         self.templates_dir.mkdir(parents=True, exist_ok=True)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
 
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def generate_filing_package(
-        self, current_state: ReturnStateObject, output_dir: str = "outputs/"
+        self,
+        current_state: "ReturnStateObject",
+        output_dir: str | None = None,
     ) -> List[str]:
-        """Generate the complete tax return PDF package.
-
-        Args:
-            current_state: The completed return state object.
-            output_dir: Optional override for the output directory.
-
-        Returns:
-            A list of absolute paths to the generated PDF files.
-        """
-        # 1. Validation Check (DAG Integrity)
+        """Produce one output file per required form."""
         if not current_state.ready_for_assembly:
-            raise ValueError(
-                "ReturnStateObject is not ready for assembly. Check completed_layers."
-            )
+            raise ValueError("ReturnStateObject is not ready for assembly. Check completed_layers.")
 
-        output_path = Path(output_dir).absolute()
-        output_path.mkdir(parents=True, exist_ok=True)
-        
-        generated_files = []
+        out_path = Path(output_dir).absolute() if output_dir else self.outputs_dir
+        out_path.mkdir(parents=True, exist_ok=True)
 
-        # 2. Read Required Forms
-        required_forms = current_state.forms_required
+        # Always include the federal core forms; deduplicate while preserving order.
+        required = list(_ALWAYS_REQUIRED)
+        for form in current_state.forms_required:
+            if form not in required:
+                required.append(form)
+        # Add Schedule-A if itemized total > 0.
+        if float((current_state.sch_a or {}).get("total", 0.0)) > 0 and "Schedule-A" not in required:
+            required.append("Schedule-A")
+        # Add Schedule-NEC if any FDAP income.
+        if float(current_state.income.fdap_taxable_total) > 0 and "Schedule-NEC" not in required:
+            required.append("Schedule-NEC")
 
-        # Avoid duplicates just in case
-        unique_forms = list(set(required_forms))
+        generated: List[str] = []
+        for form_name in required:
+            if form_name not in FORM_REGISTRY:
+                logger.warning("No populator registered for form %s; skipping.", form_name)
+                continue
 
-        for form_name in unique_forms:
+            field_map = FORM_REGISTRY[form_name](current_state)
+            stem = self._safe_stem(current_state, form_name)
             template_path = self.templates_dir / f"{form_name}.pdf"
-            out_file = output_path / f"student_name_{form_name}.pdf"
 
-            # 3. Establish the Mapping Dictionary
-            mapping = self._get_field_mapping(current_state, form_name)
+            if template_path.exists():
+                pdf_out = out_path / f"{stem}_{form_name}.pdf"
+                self._inject_pdf_data(template_path, field_map, pdf_out)
+                generated.append(str(pdf_out))
+            else:
+                # Template not yet vendored — emit the field-map as JSON so the
+                # downstream UI / human reviewer can verify correctness.
+                json_out = out_path / f"{stem}_{form_name}.fieldmap.json"
+                json_out.write_text(
+                    json.dumps(field_map, indent=2, default=_json_default),
+                    encoding="utf-8",
+                )
+                logger.warning(
+                    "Template %s missing; wrote field-map JSON to %s.",
+                    template_path,
+                    json_out,
+                )
+                generated.append(str(json_out))
 
-            # 4. PDF Injection Hand-off
-            self._inject_pdf_data(str(template_path), mapping, str(out_file))
-            
-            generated_files.append(str(out_file))
+        return generated
 
-        return generated_files
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
 
-    def _get_field_mapping(
-        self, current_state: ReturnStateObject, form_name: str
-    ) -> Dict[str, Any]:
-        """Map abstract state variables to specific IRS PDF form field keys.
+    @staticmethod
+    def _safe_stem(state: "ReturnStateObject", form_name: str) -> str:
+        ident = state.identity
+        name = f"{ident.first_name}_{ident.last_name}".strip("_")
+        if not name:
+            name = "filer"
+        return name.replace(" ", "_")
 
-        Note: These are temporary logical keys representing fields. A real
-        production implementation would map these to precise AcroForm keys.
-
-        Args:
-            current_state: Completed state object.
-            form_name: The target form identifier (e.g., '1040-NR').
-
-        Returns:
-            A dictionary mapping PDF string keys to string/numeric values.
-        """
-        mapping = {}
-
-        if form_name == "1040-NR":
-            mapping["Line_24_Total_Tax"] = current_state.tax.total_tax_liability
-            mapping["Line_35a_Refund"] = current_state.tax.refund_or_owed
-        
-        elif form_name == "8843":
-            mapping["Part_III_Line_11"] = current_state.residency.years_in_exempt_status
-        
-        elif form_name == "843":
-            mapping["Line_1_Amount"] = current_state.fica.incorrect_ss_withheld
-
-        return mapping
-
-    def _inject_pdf_data(self, template_path: str, data: Dict[str, Any], output_path: str) -> None:
-        """Inject values into a PDF and flatten it.
-
-        Args:
-            template_path: Path to the blank PDF template.
-            data: Key/Value mapping to inject into the form.
-            output_path: Path to save the flattened output.
-        """
+    def _inject_pdf_data(
+        self,
+        template_path: Path,
+        data: Dict[str, Any],
+        output_path: Path,
+    ) -> None:
+        """Inject ``data`` into AcroForm fields of ``template_path`` and flatten."""
         if not os.path.exists(template_path):
-            # For testing and initial setup where templates might not exist,
-            # we just touch a blank file if running in an mocked environment.
-            # In a real environment, you'd raise an FileNotFoundError.
-            import logging
-            logging.warning(f"Template {template_path} does not exist. Skipping physical PDF generation.")
+            logger.warning(
+                "Template %s does not exist. Skipping physical PDF generation.",
+                template_path,
+            )
             return
 
-        reader = PdfReader(template_path)
+        reader = PdfReader(str(template_path))
         writer = PdfWriter()
 
-        # Add pages from the reader to the writer
         for page in reader.pages:
             writer.add_page(page)
 
-        # PyPDF provides update_page_form_field_values 
-        # (Though we write to all pages generically safely here)
-        str_data = {k: str(v) for k, v in data.items()}
+        # AcroForm fill — pypdf wants string values.
+        str_data = {k: _fmt_value(v) for k, v in data.items() if not k.startswith("_")}
         for page in writer.pages:
-            # We use writer.update_page_form_field_values which requires the page,
-            # and a dictionary. Using the new API of pypdf.
             writer.update_page_form_field_values(page, str_data)
 
-        # Flatten the PDF (make it read-only)
-        # Note: Depending on pypdf version, one common way is to run through the annotations.
+        # Flatten: set the ReadOnly flag (bit 7) on every annotation.
         for page in writer.pages:
             if "/Annots" in page:
                 for annot in page["/Annots"]:
-                    # Set the ReadOnly bit (bit 7)
                     annot_obj = annot.get_object()
-                    # 1 << 6 is 64 (bit 7)
-                    annot_obj.update({NameObject("/Ff"): NumberObject(64)})
+                    annot_obj.update({NameObject("/Ff"): NumberObject(1 << 6)})
 
-        with open(output_path, "wb") as f_out:
-            writer.write(f_out)
+        with open(output_path, "wb") as out:
+            writer.write(out)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _json_default(obj):
+    try:
+        return float(obj)
+    except (TypeError, ValueError):
+        return str(obj)
+
+
+def _fmt_value(value) -> str:
+    if value is True:
+        return "X"
+    if value is False or value is None:
+        return ""
+    if isinstance(value, (list, dict)):
+        # Complex sub-fields are not directly PDF-writable; the per-form
+        # populators expose them via underscore-prefixed keys which we
+        # already filter out. Anything reaching here is unexpected.
+        return json.dumps(value)
+    return str(value)
