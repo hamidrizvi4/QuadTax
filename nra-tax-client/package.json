@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "gen-openapi": "cd ../nra-tax-engine && python -m scripts.gen_openapi --out ../nra-tax-client/openapi.json",
+    "gen-types": "npx openapi-typescript ./openapi.json -o ./src/lib/api-types.ts",
+    "sync-api": "npm run gen-openapi && npm run gen-types"
   },
   "dependencies": {
     "axios": "^1.15.0",
