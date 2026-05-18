@@ -1,0 +1,47 @@
+{
+  "_description": "TY2025 New York State tax parameters. Used in the IT-203 (nonresident/part-year) pipeline. New York does NOT honor federal tax treaties — treaty-exempt income at the federal level is added back to NY taxable income (NY Publication 88). Source: NY Department of Taxation and Finance, NY Tax Law Article 22, IT-203 instructions for 2025.",
+  "_tax_year": 2025,
+  "_source": "NY Tax Law §601; NYS DTF 2025 indexed amounts (subject to update upon NY release)",
+  "_status": "PLACEHOLDER — verify and refresh values upon NYS DTF release of TY2025 indexed figures",
+  "brackets_single": [
+    { "rate": 0.04,   "min": 0,        "up_to": 8500,    "base_tax": 0 },
+    { "rate": 0.045,  "min": 8500,     "up_to": 11700,   "base_tax": 340 },
+    { "rate": 0.0525, "min": 11700,    "up_to": 13900,   "base_tax": 484 },
+    { "rate": 0.055,  "min": 13900,    "up_to": 80650,   "base_tax": 600 },
+    { "rate": 0.06,   "min": 80650,    "up_to": 215400,  "base_tax": 4271 },
+    { "rate": 0.0685, "min": 215400,   "up_to": 1077550, "base_tax": 12356 },
+    { "rate": 0.0965, "min": 1077550,  "up_to": 5000000, "base_tax": 71413 },
+    { "rate": 0.103,  "min": 5000000,  "up_to": 25000000, "base_tax": 449929 },
+    { "rate": 0.109,  "min": 25000000, "up_to": null,    "base_tax": 2509929 }
+  ],
+  "standard_deduction": {
+    "_note": "NY does not follow federal NRA restrictions — NY standard deduction is available to nonresident filers on IT-203 regardless of federal NRA status. NY uses domicile-based residency, not federal SPT.",
+    "single": 8000,
+    "mfs": 8000,
+    "mfj": 16050,
+    "qss": 16050,
+    "hoh": 11200,
+    "single_dependent": 3100
+  },
+  "nyc_brackets_single": [
+    { "rate": 0.03078, "min": 0,      "up_to": 12000,  "base_tax": 0 },
+    { "rate": 0.03762, "min": 12000,  "up_to": 25000,  "base_tax": 369 },
+    { "rate": 0.03819, "min": 25000,  "up_to": 50000,  "base_tax": 858 },
+    { "rate": 0.03876, "min": 50000,  "up_to": null,   "base_tax": 1813 }
+  ],
+  "yonkers": {
+    "resident_surcharge_rate": 0.16675,
+    "nonresident_earnings_rate": 0.005
+  },
+  "residency_rules": {
+    "_note": "NY statutory residency: domiciled in NY OR maintains a permanent place of abode in NY for more than 11 months AND spends more than 183 days in NY. Student dormitories generally do NOT count as a permanent place of abode (Matter of Petition of Knight). NY does NOT honor federal SPT.",
+    "permanent_abode_min_months": 11,
+    "days_in_ny_threshold": 184,
+    "student_dorm_exclusion_cite": "Matter of Petition of Knight, NY DTA 2002"
+  },
+  "treaty_conformity": {
+    "_note": "NY does NOT conform to federal tax treaties. Treaty-exempt federal wages/scholarships are added back to NY income on IT-203.",
+    "honors_federal_treaties": false,
+    "cite": "NY Publication 88, NY Tax Law §612"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "_description": "TY2025 IRS graduated tax brackets — Qualifying Surviving Spouse. Available to NRA filers per Form 1040-NR instructions when the filer's spouse died in the previous 2 tax years and the filer maintains a household for a qualifying child. Source: IRS Rev. Proc. 2024-40 (October 2024).",
+  "_tax_year": 2025,
+  "_filing_status": "qss",
+  "_source": "IRS Rev. Proc. 2024-40, Section 3.01, Table 2 (MFJ/QSS share brackets)",
+  "brackets": [
+    { "rate": 0.10, "min": 0,       "up_to": 23850,  "base_tax": 0 },
+    { "rate": 0.12, "min": 23850,   "up_to": 96950,  "base_tax": 2385.00 },
+    { "rate": 0.22, "min": 96950,   "up_to": 206700, "base_tax": 11157.00 },
+    { "rate": 0.24, "min": 206700,  "up_to": 394600, "base_tax": 35302.00 },
+    { "rate": 0.32, "min": 394600,  "up_to": 501050, "base_tax": 80398.00 },
+    { "rate": 0.35, "min": 501050,  "up_to": 751600, "base_tax": 114462.00 },
+    { "rate": 0.37, "min": 751600,  "up_to": null,   "base_tax": 202154.50 }
+  ]
+}

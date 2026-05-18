@@ -1,0 +1,25 @@
+{
+  "_description": "TY2025 FICA (Federal Insurance Contributions Act) wage bases and rates. Used for (a) computing employer-correct FICA when a filer is NOT exempt, and (b) computing the Form 843 refund amount when a NRA on F/J/M/Q visa had FICA incorrectly withheld during their exempt period. NRAs on F-1, J-1, M-1, or Q-1 visas performing services within their visa-authorized purpose are exempt under IRC §3121(b)(19). Source: SSA Press Release Oct 10 2024; IRS Notice on Additional Medicare Tax.",
+  "_tax_year": 2025,
+  "_source": "SSA 2025 Cost-of-Living Adjustment release (Oct 2024); IRC §3121(a); IRC §1401(b)(2)",
+  "social_security": {
+    "wage_base": 176100,
+    "employee_rate": 0.062,
+    "employer_rate": 0.062
+  },
+  "medicare": {
+    "_note": "No wage cap on regular Medicare. Additional Medicare 0.9% applies to wages above threshold (employee portion only; employer does not match).",
+    "employee_rate": 0.0145,
+    "employer_rate": 0.0145,
+    "additional_medicare_rate": 0.009,
+    "additional_medicare_thresholds": {
+      "single": 200000,
+      "mfs": 125000,
+      "mfj": 250000,
+      "qss": 200000,
+      "hoh": 200000
+    }
+  },
+  "fica_exempt_visas": ["F-1", "J-1", "M-1", "Q-1"],
+  "fica_exempt_cite": "IRC §3121(b)(19); Treas. Reg. §31.3121(b)(19)-1"
+}

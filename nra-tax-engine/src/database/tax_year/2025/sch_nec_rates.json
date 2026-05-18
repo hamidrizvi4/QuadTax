@@ -1,0 +1,28 @@
+{
+  "_description": "TY2025 Schedule NEC (1040-NR) statutory flat rates by FDAP income category. Treaty-reduced rates are applied separately by the TreatyEvaluator. NRAs are taxed on US-source FDAP income at the statutory rates below under IRC §871(a), with no deductions allowed. Source: IRS Instructions for Form 1040-NR (2024), Schedule NEC; Pub 519 Ch 4.",
+  "_tax_year": 2025,
+  "_source": "IRC §871(a); Form 1040-NR Schedule NEC instructions",
+  "default_rate": 0.30,
+  "category_rates": {
+    "interest": 0.30,
+    "dividends": 0.30,
+    "royalties_copyright": 0.30,
+    "royalties_other": 0.30,
+    "real_property_income_no_871d_election": 0.30,
+    "real_property_gain_usrpi": 0.15,
+    "gambling_winnings": 0.30,
+    "social_security_benefits": 0.30,
+    "pensions_annuities_periodic": 0.30,
+    "scholarship_fellowship_fjmq_visa": 0.14,
+    "scholarship_fellowship_default": 0.30,
+    "other_fdap": 0.30
+  },
+  "long_term_capital_gain_us_source_non_real_property": {
+    "_note": "Generally exempt unless NRA was present 183+ days during the tax year (IRC §871(a)(2)). If 183-day rule met, treated as effectively from US source at 30% on net gains.",
+    "default": 0.0,
+    "if_present_183_days_or_more": 0.30
+  },
+  "treaty_override": {
+    "_note": "Treaty-reduced rates (e.g., 0% for China Art 20(b) scholarships) override the statutory rate. Handled by TreatyEvaluator."
+  }
+}
