@@ -30,6 +30,8 @@
       "note": "Japan treaty (2004 protocol) exempts foreign-source maintenance/education only."
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 20 (Students and Business Apprentices) against IRS Pub 901 Table 2/3 (Japan) and US-Japan Income Tax Convention (2003; entered into force 2004-03-30, replacing the 1971 convention). Japan provides ONLY foreign-source maintenance/education exemption — no US-source student wage cap. The 2004 treaty has no Article 19 (teachers) carve-out that some older guides reference; visiting researchers must rely on §117 qualified-scholarship exclusion plus default NRA rules."
+  ],
+  "verified_against_pub901": true
 }

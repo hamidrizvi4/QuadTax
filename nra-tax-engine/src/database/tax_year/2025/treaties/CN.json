@@ -69,7 +69,8 @@
     }
   ],
   "notes": [
-    "China treaty applies to mainland PRC only; does not cover Hong Kong or Taiwan."
+    "China treaty applies to mainland PRC only; does not cover Hong Kong or Taiwan.",
+    "AUDIT 2025-05-19: Verified all three articles against IRS Pub 901 Tables 2 & 3 and US-PRC Income Tax Treaty (1984) plus 1986 Protocol. Article 19 covers teachers/researchers for 3 years from arrival with no saving-clause survival. Articles 20(b) (scholarships) and 20(c) ($5,000 student wages) BOTH carry the protocol-paragraph-2 saving-clause exception, so the benefit continues after the F-1 holder becomes a resident alien under SPT — a feature unique to the China treaty among major partners."
   ],
-  "verified_against_pub901": false
+  "verified_against_pub901": true
 }

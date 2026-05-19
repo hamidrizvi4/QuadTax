@@ -30,6 +30,9 @@
       "note": "UK treaty exempts foreign-source maintenance/education payments only. US-source wages NOT exempt. No $9k cap (that's Germany)."
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 20A (Students) against IRS Pub 901 Table 2/3 (United Kingdom) and US-UK Income Tax Treaty (2001) as amended by the 2002 Protocol. The student article id is 20A — NOT 20 — because the 2002 Protocol restructured Article 20 (Pensions/Social Security) and inserted a separate Article 20A for Students. The UK treaty exempts foreign-source maintenance and education payments only; US-source wages from an on-campus job are NOT treaty-exempt under any UK provision.",
+    "Common confusion: the $9,000/year cap mentioned in some online guides is Germany's Article 20(4), NOT a UK provision. The UK student article has no dollar or year cap."
+  ],
+  "verified_against_pub901": true
 }

@@ -51,7 +51,8 @@
     }
   ],
   "notes": [
-    "Per US Treasury technical explanation, Article 21(2) is interpreted to allow Indian students/business apprentices to claim the same standard deduction as US single filers."
+    "Per US Treasury technical explanation, Article 21(2) is interpreted to allow Indian students/business apprentices to claim the same standard deduction as US single filers.",
+    "AUDIT 2025-05-19: Verified Article 21(1) (foreign-source scholarships) and Article 21(2) (standard-deduction-equivalent) against IRS Pub 901 Tables 2 & 3 and US-India Income Tax Convention Articles 21 and 1(4)(b). India is unique among US treaty partners in granting students the federal single standard deduction."
   ],
-  "verified_against_pub901": false
+  "verified_against_pub901": true
 }

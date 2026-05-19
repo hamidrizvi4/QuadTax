@@ -47,9 +47,11 @@
       "requires_form_8833_if_over": 10000.0,
       "notice_2010_21_exception": false,
       "pub901_table_ref": "Table 3, Pakistan",
-      "note": null
+      "note": "Pakistan scholarships exempt only when paid from foreign source."
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article XIII(1) against IRS Pub 901 Tables 2 & 3 (Pakistan) and US-Pakistan Income Tax Convention (signed 1957-07-01, entered into force 1959-07-01). Pakistan's $5,000 student wage exemption is unusual for having NO year cap — the benefit is available for the entire duration of student status. The same article id covers both student wages (US-source) and scholarships (foreign-source)."
+  ],
+  "verified_against_pub901": true
 }

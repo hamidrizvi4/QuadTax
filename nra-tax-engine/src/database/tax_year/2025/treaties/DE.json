@@ -2,7 +2,7 @@
   "country_name": "Germany",
   "iso2": "DE",
   "treaty_in_force": true,
-  "treaty_effective_date": "1989-08-21",
+  "treaty_effective_date": "1989-08-29",
   "saving_clause": {
     "exists": true,
     "cite": "Article 1(4)",
@@ -16,8 +16,7 @@
         "F-1",
         "J-1",
         "M-1",
-        "Q-1",
-        "J-1"
+        "Q-1"
       ],
       "max_dollar_cap": 9000.0,
       "max_year_cap": 4,
@@ -37,8 +36,7 @@
         "F-1",
         "J-1",
         "M-1",
-        "Q-1",
-        "J-1"
+        "Q-1"
       ],
       "max_dollar_cap": null,
       "max_year_cap": null,
@@ -52,6 +50,9 @@
       "note": "Foreign-source scholarship/fellowship grants exempt."
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 20(4) ($9,000 student/trainee compensation, max 4 taxable years) and Article 20(2) (foreign-source scholarships) against IRS Pub 901 Tables 2 & 3 (Germany) and US-Germany Income Tax Convention Article 20. Fixed two seed bugs found during audit: duplicate 'J-1' in covered_visas list, and treaty_effective_date corrected from 1989-08-21 to 1989-08-29 (entry into force per the protocol of exchange of instruments of ratification).",
+    "The 4-year window runs from the first arrival in the US in student/trainee status, not from F-1 issuance — common confusion point."
+  ],
+  "verified_against_pub901": true
 }

@@ -27,7 +27,7 @@
       "requires_form_8833_if_over": 0.0,
       "notice_2010_21_exception": false,
       "pub901_table_ref": "Table 2, France",
-      "note": null
+      "note": "$5,000 cap on US-source compensation for personal services, 5-year max from first arrival."
     },
     {
       "article_id": "21(1)",
@@ -50,6 +50,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 21(1) (a) foreign-source scholarship exemption and (b) $5,000 US-source wage cap with 5-year limit against IRS Pub 901 Tables 2 & 3 (France) and US-France Income Tax Convention (1994) Article 21. Both parts share the same article id but cover distinct income flows — the deterministic evaluator treats them as separate article rows."
+  ],
+  "verified_against_pub901": true
 }

@@ -50,6 +50,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 21(2) ($8,000 student wages, max 2 years from arrival) and Article 21(1) (scholarship/fellowship, foreign and US source) against IRS Pub 901 Tables 2 & 3 (Bangladesh) and US-Bangladesh Income Tax Treaty (2004; entered into force 2006-08-07) Article 21. The 2-year window — unusual for student treaties — is the key edge case here; Bangladeshi students cannot claim Article 21(2) beyond their second taxable year in the US."
+  ],
+  "verified_against_pub901": true
 }

@@ -30,6 +30,8 @@
       "note": "Canadian treaty exempts foreign-source maintenance/education payments to students/trainees. US-source wages not exempt under this article."
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article XX (Students) against IRS Pub 901 Table 2/3 (Canada) and US-Canada Income Tax Convention Article XX. Canada's student article covers ONLY foreign-source maintenance/education payments — US-source wages from a Canadian student's on-campus job are NOT treaty-exempt. The treaty's Article XXIX saving clause is conservative — the engine treats Article XX as lost upon RA status to avoid over-claiming."
+  ],
+  "verified_against_pub901": true
 }
