@@ -30,6 +30,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 18(1) ($2,000 / 5 years) against IRS Pub 901 Table 2 (Poland) and US-Poland Income Tax Convention (1974) Article 18. The 2013 protocol has been signed but not ratified by the US Senate, so the 1974 treaty still controls."
+  ],
+  "verified_against_pub901": true
 }

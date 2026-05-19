@@ -30,6 +30,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 20(1) ($2,000 / 5 years) against IRS Pub 901 Table 2 (Romania) and US-Romania Income Tax Convention (1973) Article 20."
+  ],
+  "verified_against_pub901": true
 }

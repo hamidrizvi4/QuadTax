@@ -50,6 +50,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 22(2) ($2,000 / 3 years) against IRS Pub 901 Table 2 (Netherlands) and US-Netherlands Income Tax Convention (1992) Article 22. The 3-year window is shorter than the typical 5-year limit."
+  ],
+  "verified_against_pub901": true
 }

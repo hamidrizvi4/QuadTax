@@ -50,6 +50,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 19(1)(b)(ii) ($9,000 / 2 years) against IRS Pub 901 Table 2 (Belgium) and US-Belgium Income Tax Convention (2007) Article 19. The 2-year window is unusually short \u2014 common error to read as 5 years."
+  ],
+  "verified_against_pub901": true
 }

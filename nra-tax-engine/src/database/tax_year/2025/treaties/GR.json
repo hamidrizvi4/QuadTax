@@ -27,9 +27,11 @@
       "requires_form_8833_if_over": 10000.0,
       "notice_2010_21_exception": false,
       "pub901_table_ref": "Table 2/3, Greece",
-      "note": "Older 1950s treaty — only foreign-source remittances covered."
+      "note": "Older 1950s treaty \u2014 only foreign-source remittances covered."
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article XII (foreign-source remittances only, no saving clause \u2014 predates the modern model treaty) against IRS Pub 901 Table 2 (Greece) and US-Greece Income Tax Convention (1950, entered into force 1953) Article XII. The treaty is one of the oldest in the US network and has no saving-clause exception."
+  ],
+  "verified_against_pub901": true
 }

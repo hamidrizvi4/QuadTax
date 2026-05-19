@@ -30,6 +30,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 20 (foreign-source remittances only) against IRS Pub 901 Table 2/3 (Italy) and US-Italy Income Tax Convention (1999) Article 20. No US-source student wage exemption."
+  ],
+  "verified_against_pub901": true
 }

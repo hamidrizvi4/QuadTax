@@ -30,6 +30,8 @@
       "note": "Foreign-source maintenance/education only."
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 20 (foreign-source remittances only \u2014 modeled as student_personal_services with foreign_source_only restriction so the evaluator correctly rejects US-source wages) against IRS Pub 901 Table 2 (Ukraine) and US-Ukraine Income Tax Convention (1994) Article 20."
+  ],
+  "verified_against_pub901": true
 }

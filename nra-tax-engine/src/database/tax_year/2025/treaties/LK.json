@@ -30,6 +30,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 21(1) ($6,000 / 5 years) against IRS Pub 901 Table 2 (Sri Lanka) and US-Sri Lanka Income Tax Convention (1985, entered into force 2003) Article 21. The $6,000 cap is unique to Sri Lanka."
+  ],
+  "verified_against_pub901": true
 }

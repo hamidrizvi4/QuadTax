@@ -30,6 +30,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 20 (foreign-source remittances only) against IRS Pub 901 Table 2/3 (Barbados) and US-Barbados Income Tax Convention (1984) Article 20."
+  ],
+  "verified_against_pub901": true
 }

@@ -10,7 +10,8 @@
   },
   "articles": [],
   "notes": [
-    "TREATY SUSPENDED. Russia notified the US in 2023 of partial suspension; the US Treasury announced on June 17, 2024 that Articles 1, 5-21, and 23 are suspended by mutual agreement beginning August 16, 2024. For TY2025, treat as no benefits available for new claims."
+    "TREATY SUSPENDED. Russia notified the US in 2023 of partial suspension; the US Treasury announced on June 17, 2024 that Articles 1, 5-21, and 23 are suspended by mutual agreement beginning August 16, 2024. For TY2025, treat as no benefits available for new claims.",
+    "AUDIT 2025-05-19: Verified treaty-suspended flag against the US Treasury announcement (June 17, 2024) suspending Articles 1, 5-21, and 23 by mutual agreement effective August 16, 2024. Russian filers should expect no treaty benefits for TY2025."
   ],
-  "verified_against_pub901": false
+  "verified_against_pub901": true
 }

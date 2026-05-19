@@ -50,6 +50,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 19(1)(b) ($9,000 / 2 years) against IRS Pub 901 Table 2 (Bulgaria) and US-Bulgaria Income Tax Convention (2008) Article 19. Structure mirrors Belgium."
+  ],
+  "verified_against_pub901": true
 }

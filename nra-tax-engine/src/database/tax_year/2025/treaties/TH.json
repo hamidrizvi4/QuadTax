@@ -50,6 +50,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 22 ($3,000 / 5 years personal services and unlimited scholarship) against IRS Pub 901 Tables 2 & 3 (Thailand) and US-Thailand Income Tax Convention (1996) Article 22."
+  ],
+  "verified_against_pub901": true
 }

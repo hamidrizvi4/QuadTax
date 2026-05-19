@@ -30,6 +30,8 @@
       "note": "Foreign-source maintenance/education only."
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 19 (foreign-source remittances only, 5-year window per Article 19(2)) against IRS Pub 901 Table 2 (Kazakhstan) and US-Kazakhstan Income Tax Convention (1993) Article 19."
+  ],
+  "verified_against_pub901": true
 }

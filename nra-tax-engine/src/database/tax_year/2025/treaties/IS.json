@@ -30,6 +30,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 19(1) ($9,000 / 5 years) against IRS Pub 901 Table 2 (Iceland) and US-Iceland Income Tax Convention (2007) Article 19."
+  ],
+  "verified_against_pub901": true
 }

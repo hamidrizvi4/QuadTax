@@ -50,6 +50,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 21(1) ($5,000 student wages, 5-year window from arrival) against IRS Pub 901 Table 2 (Czech Republic) and US-Czech Republic Income Tax Convention (1993) Article 21."
+  ],
+  "verified_against_pub901": true
 }

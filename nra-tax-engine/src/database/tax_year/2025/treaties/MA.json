@@ -30,6 +30,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 18 ($2,000 / 5 years) against IRS Pub 901 Table 2 (Morocco) and US-Morocco Income Tax Convention (1981) Article 18."
+  ],
+  "verified_against_pub901": true
 }

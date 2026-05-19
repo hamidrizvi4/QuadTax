@@ -16,6 +16,18 @@ from src.functions.treaty_evaluator import TreatyEvaluator
 
 AUDITED = ["IN", "CN", "KR", "CA", "BD", "DE", "FR", "GB", "PK", "JP"]
 
+# Countries audited in the second pass (the remaining 56). Combined with
+# AUDITED above this covers every file in the database.
+SECOND_PASS = [
+    "AM", "AT", "AU", "AZ", "BB", "BE", "BG", "BY", "CH", "CY", "CZ", "DK",
+    "EE", "EG", "ES", "FI", "GE", "GR", "HU", "ID", "IE", "IL", "IS", "IT",
+    "JM", "KG", "KZ", "LK", "LT", "LU", "LV", "MA", "MD", "MT", "MX", "NL",
+    "NO", "NZ", "PH", "PL", "PT", "RO", "RU", "SE", "SI", "SK", "TH", "TJ",
+    "TM", "TN", "TR", "TT", "UA", "UZ", "VE", "ZA",
+]
+
+USSR_SUCCESSOR_STATES = ["AM", "AZ", "BY", "GE", "KG", "MD", "TJ", "TM", "UZ"]
+
 
 def _articles_by_id(doc, article_id: str, category: str | None = None):
     matches = [a for a in doc.articles if a.article_id == article_id]
@@ -137,3 +149,159 @@ class TestPinnedValues:
         jp = self.evaluator.country("JP")
         assert len(jp.articles) == 1
         assert jp.articles[0].source_restriction == "foreign_source_only"
+
+
+class TestSecondPassAuditFlags:
+    """The remaining 56 countries audited in the second pass must stay verified."""
+
+    def setup_method(self):
+        self.evaluator = TreatyEvaluator(tax_year=2025)
+
+    def test_full_database_verified(self):
+        """Every loaded country must carry verified_against_pub901=True."""
+        unverified = [
+            iso
+            for iso, doc in self.evaluator.countries.items()
+            if not doc.verified_against_pub901
+        ]
+        assert unverified == [], f"Unverified countries: {unverified}"
+
+    def test_no_country_dropped_from_second_pass(self):
+        for iso in SECOND_PASS:
+            assert self.evaluator.country(iso) is not None, f"Missing {iso}"
+
+
+class TestSecondPassPinnedValues:
+    """Lock in specific values for the second-pass countries."""
+
+    def setup_method(self):
+        self.evaluator = TreatyEvaluator(tax_year=2025)
+
+    # Tier A — $5,000 / 5 years
+    def test_5k_5yr_tier_consistent(self):
+        for iso in ("CZ", "EE", "LT", "LV", "PT", "SK", "SI", "ES", "VE"):
+            doc = self.evaluator.country(iso)
+            wage = [
+                a
+                for a in doc.articles
+                if a.category == "student_personal_services" and a.max_dollar_cap == 5000.0
+            ]
+            assert wage, f"{iso}: missing $5,000 student-wage article"
+            assert wage[0].max_year_cap == 5, f"{iso}: year cap is {wage[0].max_year_cap}, expected 5"
+
+    # Tier B — $2,000 / 5 years (NL is the exception at 3 yrs)
+    def test_2k_5yr_tier_consistent(self):
+        for iso in ("CY", "ID", "JM", "MA", "NO", "PL", "RO", "TT"):
+            doc = self.evaluator.country(iso)
+            wage = [
+                a
+                for a in doc.articles
+                if a.category == "student_personal_services" and a.max_dollar_cap == 2000.0
+            ]
+            assert wage, f"{iso}: missing $2,000 student-wage article"
+            assert wage[0].max_year_cap == 5, f"{iso}: year cap is {wage[0].max_year_cap}, expected 5"
+
+    def test_netherlands_uses_3yr_window(self):
+        """NL is the only $2k country with a 3-year window (not 5)."""
+        nl = self.evaluator.country("NL")
+        [art] = _articles_by_id(nl, "22(2)")
+        assert art.max_dollar_cap == 2000.0
+        assert art.max_year_cap == 3
+
+    # Tier C — assorted caps
+    def test_belgium_bulgaria_9k_2yr(self):
+        for iso in ("BE", "BG"):
+            doc = self.evaluator.country(iso)
+            wage = [
+                a for a in doc.articles if a.category == "student_personal_services"
+            ]
+            assert wage[0].max_dollar_cap == 9000.0
+            assert wage[0].max_year_cap == 2
+
+    def test_denmark_8k_3yr(self):
+        dk = self.evaluator.country("DK")
+        [art] = _articles_by_id(dk, "19(1)")
+        assert art.max_dollar_cap == 8000.0
+        assert art.max_year_cap == 3
+
+    def test_iceland_malta_9k_5yr(self):
+        is_doc = self.evaluator.country("IS")
+        [art] = _articles_by_id(is_doc, "19(1)")
+        assert art.max_dollar_cap == 9000.0
+        assert art.max_year_cap == 5
+
+        mt = self.evaluator.country("MT")
+        [art] = _articles_by_id(mt, "20")
+        assert art.max_dollar_cap == 9000.0
+
+    def test_sri_lanka_6k(self):
+        lk = self.evaluator.country("LK")
+        [art] = _articles_by_id(lk, "21(1)")
+        assert art.max_dollar_cap == 6000.0
+
+    def test_tunisia_4k(self):
+        tn = self.evaluator.country("TN")
+        [art] = _articles_by_id(tn, "20")
+        assert art.max_dollar_cap == 4000.0
+
+    def test_3k_tier(self):
+        for iso in ("EG", "IL", "PH", "TH"):
+            doc = self.evaluator.country(iso)
+            wage = [
+                a
+                for a in doc.articles
+                if a.category == "student_personal_services" and a.max_dollar_cap == 3000.0
+            ]
+            assert wage, f"{iso}: missing $3,000 student-wage article"
+            assert wage[0].max_year_cap == 5
+
+    # Tier D — foreign-source-only
+    def test_foreign_source_only_tier(self):
+        for iso in (
+            "AT", "BB", "CH", "FI", "GR", "IE", "IT", "LU", "MX",
+            "NZ", "SE", "TR", "ZA",
+        ):
+            doc = self.evaluator.country(iso)
+            assert doc.articles, f"{iso}: zero articles seeded"
+            for art in doc.articles:
+                assert art.source_restriction == "foreign_source_only", (
+                    f"{iso}: article {art.article_id} has {art.source_restriction}, "
+                    "expected foreign_source_only"
+                )
+
+    def test_australia_has_no_articles(self):
+        au = self.evaluator.country("AU")
+        assert au.articles == []
+
+    # Tier E — USSR successor states get TWO articles after audit fix
+    def test_ussr_successors_have_us_source_article(self):
+        """The audit added Article VI(1)(c) ($10,000 / 5 yr US-source wages)."""
+        for iso in USSR_SUCCESSOR_STATES:
+            doc = self.evaluator.country(iso)
+            us_source_wage = [
+                a
+                for a in doc.articles
+                if a.article_id == "VI(1)(c)"
+                and a.category == "student_personal_services"
+                and a.source_restriction == "us_source_only"
+            ]
+            assert us_source_wage, f"{iso}: missing Article VI(1)(c) US-source row"
+            assert us_source_wage[0].max_dollar_cap == 10000.0
+            assert us_source_wage[0].max_year_cap == 5
+
+    def test_ussr_successors_still_have_foreign_source_article(self):
+        """The original Article VI (foreign-source maintenance) must remain alongside."""
+        for iso in USSR_SUCCESSOR_STATES:
+            doc = self.evaluator.country(iso)
+            foreign_source = [
+                a for a in doc.articles
+                if a.article_id == "VI" and a.source_restriction == "foreign_source_only"
+            ]
+            assert foreign_source, f"{iso}: missing original Article VI foreign-source row"
+
+    # Tier F — not in force
+    def test_hungary_and_russia_not_in_force(self):
+        for iso in ("HU", "RU"):
+            doc = self.evaluator.country(iso)
+            assert doc.treaty_in_force is False, f"{iso}: should be treaty_in_force=False"
+            assert doc.articles == [], f"{iso}: should have no active articles"

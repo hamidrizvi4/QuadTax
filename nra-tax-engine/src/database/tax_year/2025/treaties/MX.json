@@ -30,6 +30,8 @@
       "note": "Mexico treaty exempts foreign-source remittances only. No US-source wage exemption."
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 21 (foreign-source remittances only) against IRS Pub 901 Table 2 (Mexico) and US-Mexico Income Tax Convention (1992) Article 21. Despite Mexico being a top source country, the treaty has NO US-source student wage exemption \u2014 common point of confusion."
+  ],
+  "verified_against_pub901": true
 }

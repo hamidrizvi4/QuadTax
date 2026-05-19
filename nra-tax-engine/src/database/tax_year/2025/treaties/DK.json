@@ -30,6 +30,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 19(1) ($8,000 / 3 years from first arrival) against IRS Pub 901 Table 2 (Denmark) and US-Denmark Income Tax Convention (1999) Article 19. The 3-year window is unusual \u2014 most US treaties use 5 years."
+  ],
+  "verified_against_pub901": true
 }

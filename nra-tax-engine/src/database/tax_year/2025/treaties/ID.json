@@ -50,6 +50,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 19(1) ($2,000 / 5 years for personal services and unlimited scholarship/grant from any source) against IRS Pub 901 Tables 2 & 3 (Indonesia) and US-Indonesia Income Tax Convention (1990 protocol) Article 19."
+  ],
+  "verified_against_pub901": true
 }

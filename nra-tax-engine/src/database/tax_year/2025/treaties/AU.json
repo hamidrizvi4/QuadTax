@@ -10,7 +10,8 @@
   },
   "articles": [],
   "notes": [
-    "Australia treaty does not provide a student wage exemption. Students may still claim §117 qualified-scholarship exclusion (statutory, not treaty)."
+    "Australia treaty does not provide a student wage exemption. Students may still claim \u00a7117 qualified-scholarship exclusion (statutory, not treaty).",
+    "AUDIT 2025-05-19: Confirmed the US-Australia Income Tax Convention (1982) does NOT include a student wage exemption article. Australian students rely on \u00a7117 qualified-scholarship exclusion plus default NRA rules."
   ],
-  "verified_against_pub901": false
+  "verified_against_pub901": true
 }

@@ -30,6 +30,8 @@
       "note": null
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 16(1) ($2,000 / 5 years) against IRS Pub 901 Table 2 (Norway) and US-Norway Income Tax Convention (1972) Article 16. Older treaty \u2014 predates the model-treaty Article numbering."
+  ],
+  "verified_against_pub901": true
 }

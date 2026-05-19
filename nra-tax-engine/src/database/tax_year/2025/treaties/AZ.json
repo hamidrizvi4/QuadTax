@@ -28,8 +28,30 @@
       "notice_2010_21_exception": false,
       "pub901_table_ref": "Table 2, USSR successor states",
       "note": null
+    },
+    {
+      "article_id": "VI(1)(c)",
+      "category": "student_personal_services",
+      "covered_visas": [
+        "F-1",
+        "J-1",
+        "M-1",
+        "Q-1"
+      ],
+      "max_dollar_cap": 10000.0,
+      "max_year_cap": 5,
+      "year_counting_rule": "from_first_arrival",
+      "source_restriction": "us_source_only",
+      "saving_clause_exception": false,
+      "saving_clause_exception_cite": null,
+      "requires_form_8833_if_over": 0.0,
+      "notice_2010_21_exception": false,
+      "pub901_table_ref": "Table 2, Commonwealth of Independent States Member",
+      "note": "USSR-US treaty Article VI(1)(c): $10,000/yr cap on US-source student personal-services income, 5-year overall limit on Article VI benefits."
     }
   ],
-  "notes": [],
-  "verified_against_pub901": false
+  "notes": [
+    "AUDIT 2025-05-19: Verified USSR-US (1973) Article VI applies to Azerbaijan as successor state. Added the missing Article VI(1)(c) $10,000 US-source student wage row."
+  ],
+  "verified_against_pub901": true
 }
