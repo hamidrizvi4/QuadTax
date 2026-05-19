@@ -203,6 +203,7 @@ class TaxEngine:
         w2_ocr_texts: List[str],
         form_1042s_ocr_texts: List[str],
         mcq_answers: Dict[str, Any],
+        initial_state: ReturnStateObject | None = None,
     ) -> Tuple[List[str], ReturnStateObject]:
         """Execute the continuous tax generation DAG from OCR to generated forms.
 
@@ -211,11 +212,17 @@ class TaxEngine:
             w2_ocr_texts: One raw text blob per uploaded W-2.
             form_1042s_ocr_texts: One raw text blob per uploaded 1042-S.
             mcq_answers: Intake answers (tax_year, visa_type, etc.).
+            initial_state: Optional pre-populated ReturnStateObject (e.g. from
+                :meth:`MCQRouter.populate_state`). Phase-3 add-ons (AMT, ITIN,
+                Form 2210) read identity fields, so passing a seeded state
+                yields more accurate W-7 / AMT detection. When omitted, the
+                engine constructs a fresh state and the identity is empty
+                until the API re-seeds it after the call.
 
         Returns:
             Tuple of ``(generated_pdf_paths, final_state)``.
         """
-        state = ReturnStateObject()
+        state = initial_state if initial_state is not None else ReturnStateObject()
         state.tax_year = mcq_answers["tax_year"]
 
         tax_year = mcq_answers["tax_year"]

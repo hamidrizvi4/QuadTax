@@ -42,3 +42,16 @@ class TestITINEligibility:
         )
         assert r.needs_w7 is False
         assert r.is_renewal is False
+
+    def test_existing_itin_unknown_last_use_defaults_to_active(self):
+        """Bug found by end-to-end QA: ITIN on file with no last-use data was
+        falling through to 'first-time application'. Should default to active."""
+        r = evaluate(
+            has_ssn=False,
+            has_existing_itin=True,
+            itin_last_used_on_return_year=None,
+            current_tax_year=2025,
+        )
+        assert r.needs_w7 is False
+        assert r.is_renewal is False
+        assert "assuming active" in r.explanation.lower()

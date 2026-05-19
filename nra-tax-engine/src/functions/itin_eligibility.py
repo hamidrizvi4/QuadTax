@@ -70,22 +70,32 @@ def evaluate(
             needs_w7=False, explanation="Filer has an SSN; no ITIN application required."
         )
 
-    if has_existing_itin and itin_last_used_on_return_year is not None:
-        years_unused = current_tax_year - itin_last_used_on_return_year
-        if years_unused >= 3:
+    if has_existing_itin:
+        if itin_last_used_on_return_year is not None:
+            years_unused = current_tax_year - itin_last_used_on_return_year
+            if years_unused >= 3:
+                return ITINEligibility(
+                    needs_w7=True,
+                    reason_code="f" if is_student else "b",
+                    is_renewal=True,
+                    explanation=(
+                        f"Existing ITIN has not been used on a return for "
+                        f"{years_unused} years; renewal required per Pub 1915. "
+                        f"Mail W-7 to Austin ITIN Operations."
+                    ),
+                )
             return ITINEligibility(
-                needs_w7=True,
-                reason_code="f" if is_student else "b",
-                is_renewal=True,
-                explanation=(
-                    f"Existing ITIN has not been used on a return for "
-                    f"{years_unused} years; renewal required per Pub 1915. "
-                    f"Mail W-7 to Austin ITIN Operations."
-                ),
+                needs_w7=False,
+                explanation="Existing ITIN remains active (used within the past 3 years).",
             )
+        # No last-use data — assume the ITIN is current. A renewal can still be
+        # triggered later by populating ``itin_last_used_on_return_year``.
         return ITINEligibility(
             needs_w7=False,
-            explanation="Existing ITIN remains active (used within the past 3 years).",
+            explanation=(
+                "Existing ITIN on file; last-use date unknown. Assuming active. "
+                "Provide itin_last_used_on_return_year to enable renewal detection."
+            ),
         )
 
     # No SSN, no existing ITIN → first-time application.

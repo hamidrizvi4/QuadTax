@@ -118,6 +118,10 @@ def submit(request: SubmitRequest) -> TaxProcessResponse:
     router = MCQRouter()
     mcq_dict = router.to_mcq_answers(request.intake)
 
+    # Pre-seed identity so Phase-3 add-ons (AMT, ITIN, Form 2210) read the
+    # right values when they run inside run_full_pipeline().
+    seeded_state = router.populate_state(request.intake)
+
     engine = TaxEngine(force_assembly=request.force_assembly)
     try:
         generated_forms, state = engine.run_full_pipeline(
@@ -125,13 +129,8 @@ def submit(request: SubmitRequest) -> TaxProcessResponse:
             w2_ocr_texts=request.w2_ocr_texts,
             form_1042s_ocr_texts=request.form_1042s_ocr_texts,
             mcq_answers=mcq_dict,
+            initial_state=seeded_state,
         )
-        # The engine's first pass uses a fresh state; immediately re-seed the
-        # identity fields from the intake payload so the form populators
-        # produce a return with the filer's name on it.
-        seeded = router.populate_state(request.intake)
-        for field_name in seeded.identity.model_fields_set:
-            setattr(state.identity, field_name, getattr(seeded.identity, field_name))
     except Exception as exc:  # noqa: BLE001
         logger.exception("Pipeline failure")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
