@@ -66,11 +66,21 @@ class TaxCalculationAgent:
                 scholarship_treaty_exempt_total += exempt
                 net_fdap = max(0.0, net_fdap - exempt)
 
+        # AGI (1040-NR line 11) = post-wage-exemption ECI + FDAP, BEFORE the
+        # line-12 deduction. (India Art 21(2) is a deduction, not a wage
+        # exemption, so it has NOT reduced net_eci above.)
+        agi = net_eci + net_fdap
+
         # --- 2. Apply standard deduction (NRA: only India treaty allows it) ---
+        deduction_amount = 0.0
+        deduction_type = "none"
         if india_standard_deduction:
             year = load_year(2025)
-            sd = year.standard_deduction.for_status("single", india_treaty=True)
-            net_eci = max(0.0, net_eci - sd)
+            deduction_amount = year.standard_deduction.for_status("single", india_treaty=True)
+            deduction_type = "standard"
+            net_eci = max(0.0, net_eci - deduction_amount)
+
+        taxable_income = max(0.0, agi - deduction_amount)
 
         # --- 3. Determine effective FDAP rate ----------------------------
         # Statutory default; F/J/M/Q scholarship gets a reduced 14% rate per Schedule NEC.
@@ -93,6 +103,10 @@ class TaxCalculationAgent:
         )
 
         # --- 5. State mutation -------------------------------------------
+        current_state.tax.agi = agi
+        current_state.tax.deduction_amount = deduction_amount
+        current_state.tax.deduction_type = deduction_type
+        current_state.tax.taxable_income = taxable_income
         current_state.tax.eci_tax_liability = result["eci_tax_liability"]
         current_state.tax.fdap_tax_liability = result["fdap_tax_liability"]
         current_state.tax.total_tax_liability = result["total_tax_liability"]

@@ -41,10 +41,12 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         b.get("country_iso2") == "IN" and b.get("article_id") == "21(2)"
         for b in treaty.applied_benefits
     )
-    chosen_label = state.sch_a.get("chosen_deduction_label", "")
-    standard_deduction_used = state.sch_a.get("standard_deduction_used", 0.0)
-    itemized_total = state.sch_a.get("total", 0.0)
-    deduction_amount = standard_deduction_used if chosen_label == "standard" else itemized_total
+    # Line 11 (AGI), line 12 (deduction), and line 15 (taxable income) are
+    # computed authoritatively by L6 and stored on state.tax. The populator
+    # reads them directly rather than re-deriving — re-deriving line 15 from
+    # treaty.exempt_amount_applied broke the India Art 21(2) case, where the
+    # benefit is a $15k standard deduction (line 12), not a wage exemption.
+    deduction_amount = float(tax.deduction_amount)
 
     # AMTI and other Schedule-2 lines flow into 1040-NR line 23a/23b.
     amt_owed = state.tax.amt_owed if hasattr(state.tax, "amt_owed") else 0.0
@@ -99,16 +101,12 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "line_9_total_income": _fmt_money(
             float(income.total_w2_wages) + float(income.fdap_taxable_total)
         ),
-        # Line 11 — AGI (same as Line 9 for most NRA students; no above-line adjustments)
-        "line_11_agi": _fmt_money(
-            float(income.total_w2_wages) + float(income.fdap_taxable_total)
-        ),
-        # Line 12 — deduction (itemized OR India standard)
+        # Line 11 — AGI (authoritative figure from L6: post-wage-exemption income)
+        "line_11_agi": _fmt_money(tax.agi),
+        # Line 12 — deduction (itemized OR India standard; from L6)
         "line_12_deduction": _fmt_money(deduction_amount),
-        # Line 15 — taxable income
-        "line_15_taxable_income": _fmt_money(
-            max(0.0, float(income.eci_taxable_total) - float(treaty.exempt_amount_applied))
-        ),
+        # Line 15 — taxable income (from L6: AGI − line-12 deduction)
+        "line_15_taxable_income": _fmt_money(tax.taxable_income),
         # Line 16 — tax (from tables)
         "line_16_tax": _fmt_money(tax.eci_tax_liability),
         # Line 23a — AMT (Form 6251)

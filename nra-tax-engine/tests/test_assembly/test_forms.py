@@ -223,3 +223,94 @@ class TestForm2210:
         m = compute("2210", state)
         assert m["_safe_harbor_met"] is True
         assert m["line_17_total_penalty"] == ""
+
+
+def _build_india_art21_2_state() -> ReturnStateObject:
+    """India F-1: Art 21(2) standard-deduction equivalent ($15k single, TY2025).
+
+    Regression fixture for the QA-caught form bugs — India's deduction is NOT a
+    wage exemption, so line 1k and Schedule OI Item L must stay empty while
+    line 12 (deduction) and line 15 (taxable income) carry the real figures.
+    """
+    state = ReturnStateObject(tax_year=2025)
+    state.identity.first_name = "Arjun"
+    state.identity.last_name = "Sharma"
+    state.identity.itin = "998765432"
+    state.identity.country_of_citizenship = "IN"
+    state.identity.country_of_tax_residence = "IN"
+    state.identity.filing_status = "single"
+    state.residency.status = "nonresident_alien"
+    state.residency.exempt_visa_type = "F-1"
+    state.residency.years_in_exempt_status = 3
+    state.residency.is_exempt_individual = True
+
+    state.income.total_w2_wages = 28000.0
+    state.income.eci_taxable_total = 28000.0
+
+    # As produced by L4 for India: 21(2) benefit present, but excluded from
+    # exempt_amount_applied (it's a deduction, not a wage exemption).
+    state.treaty.is_eligible = True
+    state.treaty.country = "IN"
+    state.treaty.article_number = "21(2)"
+    state.treaty.exempt_amount_applied = 0.0
+    state.treaty.applied_to_category = "student_personal_services"
+    state.treaty.requires_form_8833 = True
+    state.treaty.applied_benefits = [
+        {
+            "country_iso2": "IN",
+            "country_name": "India",
+            "article_id": "21(2)",
+            "category": "student_personal_services",
+            "exempt_amount": 28000.0,  # phantom (uncapped) — must not surface on forms
+            "rate_override": None,
+            "applies_after_saving_clause": False,
+            "requires_form_8833": True,
+            "explanation": "India Article 21(2) standard-deduction equivalent.",
+        }
+    ]
+
+    # As produced by L6.
+    state.tax.agi = 28000.0
+    state.tax.deduction_amount = 15000.0
+    state.tax.deduction_type = "standard"
+    state.tax.taxable_income = 13000.0
+    state.tax.eci_tax_liability = 1322.0
+    state.tax.total_tax_liability = 1322.0
+    state.tax.total_withholding_credits = 4200.0
+    state.tax.refund_or_owed = -2878.0
+    return state
+
+
+class TestIndiaForm1040NR:
+    """Regression for the India Art 21(2) form-population bugs caught by QA."""
+
+    def test_line_12_shows_standard_deduction(self):
+        m = compute("1040-NR", _build_india_art21_2_state())
+        assert m["line_12_deduction"] == "15000"
+
+    def test_line_15_taxable_income_is_agi_minus_deduction(self):
+        m = compute("1040-NR", _build_india_art21_2_state())
+        assert m["line_11_agi"] == "28000"
+        assert m["line_15_taxable_income"] == "13000"
+
+    def test_line_1k_treaty_exempt_wages_is_empty(self):
+        """India exempts NO wages — line 1k must be blank."""
+        m = compute("1040-NR", _build_india_art21_2_state())
+        assert m["line_1k_treaty_exempt_wages"] == ""
+
+    def test_line_16_tax_and_refund(self):
+        m = compute("1040-NR", _build_india_art21_2_state())
+        assert m["line_16_tax"] == "1322"
+        assert m["line_33_refund"] == "2878"
+
+    def test_schedule_oi_item_l_excludes_india_21_2(self):
+        """India 21(2) is a deduction, not exempt income — Item L must omit it."""
+        m = compute("Schedule-OI", _build_india_art21_2_state())
+        assert m["item_L_treaty_rows"] == []
+
+    def test_form_8833_still_generated_for_india(self):
+        """Disclosure is still filed even though the benefit is a deduction."""
+        m = compute("8833", _build_india_art21_2_state())
+        assert m["count"] == 1
+        assert m["rows"][0]["box_2_treaty_country"] == "India"
+        assert m["rows"][0]["box_3_treaty_article"] == "21(2)"

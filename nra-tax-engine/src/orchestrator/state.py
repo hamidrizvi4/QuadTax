@@ -455,6 +455,42 @@ class TaxCalculatedState(BaseModel):
     and the final refund/balance-due determination.
     """
 
+    agi: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Adjusted Gross Income for the 1040-NR (line 11). For NRA students "
+            "this is gross wages + taxable FDAP, after treaty WAGE exemptions "
+            "(e.g. China Art 20(c)) but BEFORE the deduction on line 12. Written "
+            "authoritatively by L6 so form populators don't re-derive it."
+        ),
+    )
+
+    deduction_amount: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Amount on 1040-NR line 12 — the larger of itemized (Schedule A) or "
+            "the standard deduction. For NRAs the standard deduction is $0 unless "
+            "the India treaty Article 21(2) applies ($15,000 single for TY2025)."
+        ),
+    )
+
+    deduction_type: Literal["standard", "itemized", "none"] = Field(
+        default="none",
+        description="Which deduction was used on line 12.",
+    )
+
+    taxable_income: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "1040-NR line 15 — AGI minus the line 12 deduction (floored at 0). "
+            "Written authoritatively by L6; the federal tax on line 16 is "
+            "computed from this figure."
+        ),
+    )
+
     eci_tax_liability: float = Field(
         default=0.0,
         ge=0.0,
