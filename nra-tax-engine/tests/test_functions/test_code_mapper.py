@@ -89,3 +89,36 @@ class TestIncomeCodeMapper:
         """Any 1042-S code outside the explicit lists should raise an error."""
         with pytest.raises(ValueError, match="Unknown or unsupported"):
             self.mapper.route_1042s_income(99, 1000.0, False, False)
+
+
+class TestExtendedFDAPCodes:
+    """Phase 2: cover the additional 1042-S codes added to the FDAP set."""
+
+    def setup_method(self):
+        self.mapper = IncomeCodeMapper()
+
+    def test_code_22_interest_to_controlling_foreign_corp(self):
+        r = self.mapper.route_1042s_income(22, 1000.0, False, False)
+        assert r["category"] == "FDAP"
+
+    def test_code_24_qie_capital_gain_distribution(self):
+        r = self.mapper.route_1042s_income(24, 500.0, False, False)
+        assert r["category"] == "FDAP"
+
+    def test_code_27_pship_distribution(self):
+        r = self.mapper.route_1042s_income(27, 750.0, False, False)
+        assert r["category"] == "FDAP"
+
+    def test_code_30_oid(self):
+        r = self.mapper.route_1042s_income(30, 200.0, False, False)
+        assert r["category"] == "FDAP"
+
+    def test_substitute_payment_codes_33_34_35(self):
+        for code in (33, 34, 35):
+            r = self.mapper.route_1042s_income(code, 100.0, False, False)
+            assert r["category"] == "FDAP"
+
+    def test_publicly_offered_security_codes_51_52_53_54(self):
+        for code in (51, 52, 53, 54):
+            r = self.mapper.route_1042s_income(code, 100.0, False, False)
+            assert r["category"] == "FDAP"

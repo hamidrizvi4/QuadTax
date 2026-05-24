@@ -1,0 +1,37 @@
+{
+  "country_name": "Portugal",
+  "iso2": "PT",
+  "treaty_in_force": true,
+  "treaty_effective_date": "1995-12-18",
+  "saving_clause": {
+    "exists": true,
+    "cite": null,
+    "exception_paragraph": null
+  },
+  "articles": [
+    {
+      "article_id": "23(1)",
+      "category": "student_personal_services",
+      "covered_visas": [
+        "F-1",
+        "J-1",
+        "M-1",
+        "Q-1"
+      ],
+      "max_dollar_cap": 5000.0,
+      "max_year_cap": 5,
+      "year_counting_rule": "from_first_arrival",
+      "source_restriction": "us_source_only",
+      "saving_clause_exception": false,
+      "saving_clause_exception_cite": null,
+      "requires_form_8833_if_over": 0.0,
+      "notice_2010_21_exception": false,
+      "pub901_table_ref": "Table 2, Portugal",
+      "note": null
+    }
+  ],
+  "notes": [
+    "AUDIT 2025-05-19: Verified Article 23(1) ($5,000 / 5 years) against IRS Pub 901 Table 2 (Portugal) and US-Portugal Income Tax Convention (1994) Article 23."
+  ],
+  "verified_against_pub901": true
+}

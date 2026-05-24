@@ -1,0 +1,822 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "QuadTax NRA Tax Engine API",
+    "description": "Production NRA tax return engine. Accepts intake fields and OCR'd document text; returns refund/owed amounts and paths to generated forms and Pub-519-Ch-8-ordered mailing packets.",
+    "version": "0.4.0"
+  },
+  "paths": {
+    "/api/v1/healthz": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Healthz",
+        "operationId": "healthz_api_v1_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Healthz Api V1 Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/submit": {
+      "post": {
+        "tags": [
+          "tax"
+        ],
+        "summary": "Submit",
+        "description": "Run the full L1-L9 pipeline against a typed intake payload.",
+        "operationId": "submit_api_v1_submit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxProcessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/upload-and-process": {
+      "post": {
+        "tags": [
+          "tax"
+        ],
+        "summary": "Upload And Process Endpoint",
+        "description": "Legacy multipart endpoint preserved for the Phase-2 client.\n\nNew clients should use ``POST /api/v1/submit`` with the typed\n:class:`SubmitRequest` body.",
+        "operationId": "upload_and_process_endpoint_api_v1_upload_and_process_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_and_process_endpoint_api_v1_upload_and_process_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxProcessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_upload_and_process_endpoint_api_v1_upload_and_process_post": {
+        "properties": {
+          "i94_file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "I94 File"
+          },
+          "w2_files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "W2 Files",
+            "default": []
+          },
+          "form_1042s_files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Form 1042S Files",
+            "default": []
+          },
+          "mcq_answers_json": {
+            "type": "string",
+            "title": "Mcq Answers Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "i94_file",
+          "mcq_answers_json"
+        ],
+        "title": "Body_upload_and_process_endpoint_api_v1_upload_and_process_post"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IntakeBanking": {
+        "properties": {
+          "direct_deposit": {
+            "type": "boolean",
+            "title": "Direct Deposit",
+            "default": false
+          },
+          "routing_number": {
+            "type": "string",
+            "title": "Routing Number",
+            "description": "9-digit routing number.",
+            "default": ""
+          },
+          "account_number": {
+            "type": "string",
+            "title": "Account Number",
+            "default": ""
+          },
+          "account_type": {
+            "type": "string",
+            "enum": [
+              "checking",
+              "savings",
+              ""
+            ],
+            "title": "Account Type",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IntakeBanking",
+        "description": "Direct-deposit routing info for federal refunds."
+      },
+      "IntakeElections": {
+        "properties": {
+          "section_6013g_election": {
+            "type": "boolean",
+            "title": "Section 6013G Election",
+            "description": "\u00a76013(g): NRA spouse of US person elected to be treated as resident.",
+            "default": false
+          },
+          "section_6013h_election": {
+            "type": "boolean",
+            "title": "Section 6013H Election",
+            "default": false
+          },
+          "section_871d_election": {
+            "type": "boolean",
+            "title": "Section 871D Election",
+            "description": "\u00a7871(d): real-property income treated as ECI.",
+            "default": false
+          },
+          "large_foreign_gifts_over_100k": {
+            "type": "boolean",
+            "title": "Large Foreign Gifts Over 100K",
+            "default": false
+          },
+          "closer_connection_exception_claimed": {
+            "type": "boolean",
+            "title": "Closer Connection Exception Claimed",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IntakeElections",
+        "description": "Tax elections / disclosures the user has previously made."
+      },
+      "IntakeFICA": {
+        "properties": {
+          "employer_attempted_refund": {
+            "type": "boolean",
+            "title": "Employer Attempted Refund",
+            "description": "True if the employer was asked to refund FICA and refused.",
+            "default": false
+          },
+          "has_form_8316": {
+            "type": "boolean",
+            "title": "Has Form 8316",
+            "description": "True if the employer-refusal Form 8316 is in hand.",
+            "default": false
+          },
+          "employer_name": {
+            "type": "string",
+            "title": "Employer Name",
+            "default": ""
+          },
+          "employer_ein": {
+            "type": "string",
+            "title": "Employer Ein",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IntakeFICA",
+        "description": "FICA-refund-claim context (Form 843 path)."
+      },
+      "IntakeIdentity": {
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "title": "First Name",
+            "default": ""
+          },
+          "middle_initial": {
+            "type": "string",
+            "title": "Middle Initial",
+            "default": ""
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name",
+            "default": ""
+          },
+          "suffix": {
+            "type": "string",
+            "title": "Suffix",
+            "default": ""
+          },
+          "date_of_birth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Of Birth",
+            "description": "ISO date (YYYY-MM-DD)."
+          },
+          "ssn": {
+            "type": "string",
+            "title": "Ssn",
+            "description": "9 digits, no dashes. Empty if no SSN.",
+            "default": ""
+          },
+          "itin": {
+            "type": "string",
+            "title": "Itin",
+            "description": "9 digits, no dashes. Empty if no ITIN.",
+            "default": ""
+          },
+          "country_of_citizenship": {
+            "type": "string",
+            "title": "Country Of Citizenship",
+            "description": "ISO2 country code.",
+            "default": ""
+          },
+          "country_of_tax_residence": {
+            "type": "string",
+            "title": "Country Of Tax Residence",
+            "description": "ISO2 country code.",
+            "default": ""
+          },
+          "passport_number": {
+            "type": "string",
+            "title": "Passport Number",
+            "default": ""
+          },
+          "passport_country": {
+            "type": "string",
+            "title": "Passport Country",
+            "description": "ISO2 country code.",
+            "default": ""
+          },
+          "us_address_line1": {
+            "type": "string",
+            "title": "Us Address Line1",
+            "default": ""
+          },
+          "us_address_line2": {
+            "type": "string",
+            "title": "Us Address Line2",
+            "default": ""
+          },
+          "us_city": {
+            "type": "string",
+            "title": "Us City",
+            "default": ""
+          },
+          "us_state": {
+            "type": "string",
+            "title": "Us State",
+            "default": ""
+          },
+          "us_zip": {
+            "type": "string",
+            "title": "Us Zip",
+            "default": ""
+          },
+          "foreign_address_line1": {
+            "type": "string",
+            "title": "Foreign Address Line1",
+            "default": ""
+          },
+          "foreign_address_line2": {
+            "type": "string",
+            "title": "Foreign Address Line2",
+            "default": ""
+          },
+          "foreign_city": {
+            "type": "string",
+            "title": "Foreign City",
+            "default": ""
+          },
+          "foreign_state_province": {
+            "type": "string",
+            "title": "Foreign State Province",
+            "default": ""
+          },
+          "foreign_country": {
+            "type": "string",
+            "title": "Foreign Country",
+            "default": ""
+          },
+          "foreign_postal_code": {
+            "type": "string",
+            "title": "Foreign Postal Code",
+            "default": ""
+          },
+          "occupation": {
+            "type": "string",
+            "title": "Occupation",
+            "default": "Student"
+          },
+          "daytime_phone": {
+            "type": "string",
+            "title": "Daytime Phone",
+            "default": ""
+          },
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "default": ""
+          },
+          "filing_status": {
+            "type": "string",
+            "enum": [
+              "single",
+              "mfs",
+              "qss"
+            ],
+            "title": "Filing Status",
+            "default": "single"
+          },
+          "spouse_first_name": {
+            "type": "string",
+            "title": "Spouse First Name",
+            "default": ""
+          },
+          "spouse_last_name": {
+            "type": "string",
+            "title": "Spouse Last Name",
+            "default": ""
+          },
+          "spouse_ssn_or_itin": {
+            "type": "string",
+            "title": "Spouse Ssn Or Itin",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IntakeIdentity",
+        "description": "Demographic, identifier, and address fields."
+      },
+      "IntakeIncome": {
+        "properties": {
+          "income_description": {
+            "type": "string",
+            "title": "Income Description",
+            "description": "Free-text description of the filer's primary income source. Drives the L4 LLM treaty-category classifier.",
+            "default": ""
+          },
+          "requires_services": {
+            "type": "boolean",
+            "title": "Requires Services",
+            "description": "True if the filer's grant required services (drives Code 16 routing).",
+            "default": false
+          },
+          "is_qualified_expense": {
+            "type": "boolean",
+            "title": "Is Qualified Expense",
+            "description": "True if a scholarship is for tuition/fees only (\u00a7117 exclusion).",
+            "default": false
+          },
+          "prior_year_treaty_claim_total": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Prior Year Treaty Claim Total",
+            "description": "For Schedule OI Item L \u2014 prior-year treaty exempt amount.",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IntakeIncome",
+        "description": "Income context the LLM-OCR alone can't supply."
+      },
+      "IntakeNYContext": {
+        "properties": {
+          "days_in_ny": {
+            "type": "integer",
+            "maximum": 366.0,
+            "minimum": 0.0,
+            "title": "Days In Ny",
+            "default": 0
+          },
+          "has_permanent_abode_in_ny": {
+            "type": "boolean",
+            "title": "Has Permanent Abode In Ny",
+            "default": false
+          },
+          "abode_months_in_year": {
+            "type": "integer",
+            "maximum": 12.0,
+            "minimum": 0.0,
+            "title": "Abode Months In Year",
+            "default": 0
+          },
+          "is_student_dorm": {
+            "type": "boolean",
+            "title": "Is Student Dorm",
+            "default": true
+          },
+          "domiciled_in_ny": {
+            "type": "boolean",
+            "title": "Domiciled In Ny",
+            "default": false
+          },
+          "moved_into_ny_mid_year": {
+            "type": "boolean",
+            "title": "Moved Into Ny Mid Year",
+            "default": false
+          },
+          "moved_out_of_ny_mid_year": {
+            "type": "boolean",
+            "title": "Moved Out Of Ny Mid Year",
+            "default": false
+          },
+          "nyc_address": {
+            "type": "boolean",
+            "title": "Nyc Address",
+            "default": false
+          },
+          "yonkers_address": {
+            "type": "boolean",
+            "title": "Yonkers Address",
+            "default": false
+          },
+          "ny_work_days": {
+            "type": "integer",
+            "maximum": 366.0,
+            "minimum": 0.0,
+            "title": "Ny Work Days",
+            "default": 0
+          },
+          "total_work_days": {
+            "type": "integer",
+            "maximum": 366.0,
+            "minimum": 0.0,
+            "title": "Total Work Days",
+            "default": 0
+          },
+          "employer_in_ny": {
+            "type": "boolean",
+            "title": "Employer In Ny",
+            "default": true
+          },
+          "institution_1042s_in_ny": {
+            "type": "boolean",
+            "title": "Institution 1042S In Ny",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IntakeNYContext",
+        "description": "NY-specific MCQ answers (set to None to skip the NY pipeline)."
+      },
+      "IntakePayload": {
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/IntakeIdentity"
+          },
+          "residency": {
+            "$ref": "#/components/schemas/IntakeResidency"
+          },
+          "income": {
+            "$ref": "#/components/schemas/IntakeIncome"
+          },
+          "ny": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntakeNYContext"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set to a populated object when the filer has any NY footprint."
+          },
+          "fica": {
+            "$ref": "#/components/schemas/IntakeFICA"
+          },
+          "banking": {
+            "$ref": "#/components/schemas/IntakeBanking"
+          },
+          "elections": {
+            "$ref": "#/components/schemas/IntakeElections"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "identity",
+          "residency",
+          "income"
+        ],
+        "title": "IntakePayload",
+        "description": "Top-level intake payload \u2014 POSTed to /api/v1/upload-and-process."
+      },
+      "IntakeResidency": {
+        "properties": {
+          "tax_year": {
+            "type": "integer",
+            "minimum": 2024.0,
+            "title": "Tax Year",
+            "default": 2025
+          },
+          "visa_type": {
+            "type": "string",
+            "title": "Visa Type",
+            "default": "F-1"
+          },
+          "visa_subtype": {
+            "type": "string",
+            "enum": [
+              "student",
+              "teacher_researcher",
+              "trainee",
+              "other"
+            ],
+            "title": "Visa Subtype",
+            "default": "student"
+          },
+          "first_us_arrival_year": {
+            "type": "integer",
+            "minimum": 1900.0,
+            "title": "First Us Arrival Year",
+            "default": 2024
+          },
+          "prior_us_visa_history": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Prior Us Visa History",
+            "description": "ISO date strings or 'YYYY' for each prior visa entry. Used to compute the cumulative 5-year exempt window."
+          },
+          "prior_year_residency_status": {
+            "type": "string",
+            "enum": [
+              "nonresident_alien",
+              "resident_alien",
+              "none"
+            ],
+            "title": "Prior Year Residency Status",
+            "default": "none"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IntakeResidency",
+        "description": "Residency / visa context. The OCR'd I-94 supplies the day counts."
+      },
+      "SubmitRequest": {
+        "properties": {
+          "intake": {
+            "$ref": "#/components/schemas/IntakePayload"
+          },
+          "i94_ocr_text": {
+            "type": "string",
+            "title": "I94 Ocr Text",
+            "default": ""
+          },
+          "w2_ocr_texts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "W2 Ocr Texts"
+          },
+          "form_1042s_ocr_texts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Form 1042S Ocr Texts"
+          },
+          "output_dir": {
+            "type": "string",
+            "title": "Output Dir",
+            "description": "Directory to write packets into.",
+            "default": "outputs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "intake"
+        ],
+        "title": "SubmitRequest",
+        "description": "Inputs to ``POST /api/v1/submit``."
+      },
+      "TaxProcessResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "'success' or 'error'."
+          },
+          "tax_year": {
+            "type": "integer",
+            "title": "Tax Year"
+          },
+          "federal_refund_or_owed": {
+            "type": "number",
+            "title": "Federal Refund Or Owed",
+            "description": "Positive = owes IRS; negative = federal refund due."
+          },
+          "ny_refund_or_owed": {
+            "type": "number",
+            "title": "Ny Refund Or Owed",
+            "description": "NY positive = owes NY DTF; negative = NY refund.",
+            "default": 0.0
+          },
+          "fica_refund_amount": {
+            "type": "number",
+            "title": "Fica Refund Amount",
+            "description": "Total Form 843 FICA refund amount (Ssec + Medicare).",
+            "default": 0.0
+          },
+          "forms_required": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Forms Required"
+          },
+          "completed_layers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Completed Layers"
+          },
+          "generated_form_outputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Generated Form Outputs",
+            "description": "Paths to per-form filled PDFs or field-map JSONs."
+          },
+          "federal_packet_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Federal Packet Path"
+          },
+          "ny_packet_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ny Packet Path"
+          },
+          "fica_packet_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fica Packet Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "tax_year",
+          "federal_refund_or_owed"
+        ],
+        "title": "TaxProcessResponse",
+        "description": "Top-level API response."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

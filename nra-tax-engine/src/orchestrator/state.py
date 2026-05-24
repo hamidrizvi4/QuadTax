@@ -26,6 +26,83 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
+class TaxpayerIdentityState(BaseModel):
+    """Demographic and identifier fields required by every IRS form.
+
+    Populated from the intake/MCQ layer. Each field maps to one or more
+    AcroForm fields across the federal forms.
+    """
+
+    first_name: str = Field(default="", description="Legal first name as on passport.")
+    middle_initial: str = Field(default="", description="Middle initial, blank if none.")
+    last_name: str = Field(default="", description="Legal last (family) name.")
+    suffix: str = Field(default="", description="Jr/Sr/III, blank if none.")
+    date_of_birth: Optional[str] = Field(
+        default=None, description="ISO date (YYYY-MM-DD)."
+    )
+
+    ssn: str = Field(
+        default="",
+        description=(
+            "Social Security Number as 9 digits without dashes. Empty if the "
+            "filer has no SSN — then ``itin`` is used."
+        ),
+    )
+    itin: str = Field(
+        default="",
+        description=(
+            "Individual Taxpayer Identification Number, 9 digits without "
+            "dashes. Used when no SSN. If both are empty, Form W-7 must be "
+            "attached on the first filing."
+        ),
+    )
+    requires_w7_application: bool = Field(
+        default=False,
+        description="True when neither SSN nor ITIN is present — triggers Form W-7.",
+    )
+
+    country_of_citizenship: str = Field(default="", description="ISO2 country code.")
+    country_of_tax_residence: str = Field(
+        default="", description="ISO2 country code for treaty purposes."
+    )
+    passport_number: str = Field(default="")
+    passport_country: str = Field(default="", description="ISO2 country code.")
+
+    us_address_line1: str = Field(default="")
+    us_address_line2: str = Field(default="")
+    us_city: str = Field(default="")
+    us_state: str = Field(default="", description="2-letter US state postal code.")
+    us_zip: str = Field(default="")
+
+    foreign_address_line1: str = Field(default="")
+    foreign_address_line2: str = Field(default="")
+    foreign_city: str = Field(default="")
+    foreign_state_province: str = Field(default="")
+    foreign_country: str = Field(default="", description="ISO2 country code.")
+    foreign_postal_code: str = Field(default="")
+
+    occupation: str = Field(
+        default="Student",
+        description="Free-text occupation; appears on 1040-NR signature block.",
+    )
+    daytime_phone: str = Field(default="")
+    email: str = Field(default="")
+
+    filing_status: Literal["single", "mfs", "qss"] = Field(
+        default="single",
+        description="NRA-permitted filing status. MFJ and HOH are not allowed on 1040-NR.",
+    )
+
+    spouse_first_name: str = Field(default="")
+    spouse_last_name: str = Field(default="")
+    spouse_ssn_or_itin: str = Field(default="")
+
+    @property
+    def primary_tin(self) -> str:
+        """Return SSN if present, else ITIN, else empty string."""
+        return self.ssn or self.itin
+
+
 class ResidencyState(BaseModel):
     """L1 — Tax residency determination results.
 
@@ -187,8 +264,11 @@ class TreatyState(BaseModel):
     """L6 (part 1) — Tax treaty application results.
 
     Captures whether the individual's country of tax residence has an
-    income tax treaty with the US and, if so, which article exempts
-    a portion of their income.
+    income tax treaty with the US and, if so, which article(s) exempt
+    a portion of their income. Multi-article countries (China, India, Korea,
+    etc.) populate ``applied_benefits`` with one entry per matching article;
+    the scalar fields below remain for backward compatibility and reflect
+    the *primary* (largest-exemption) benefit.
     """
 
     is_eligible: bool = Field(
@@ -208,17 +288,17 @@ class TreatyState(BaseModel):
         description=(
             "ISO 3166-1 alpha-2 country code of the treaty partner country "
             "(e.g. 'IN' for India, 'CN' for China, 'KR' for South Korea). "
-            "Looked up in database/treaties.json. None if no treaty applies."
+            "Looked up in database/tax_year/<year>/treaties/. None if no treaty applies."
         ),
     )
 
     article_number: Optional[str] = Field(
         default=None,
         description=(
-            "The specific treaty article that grants the exemption, "
-            "e.g. '21(2)' for India's student wage exemption or '20(b)' for "
-            "China's $5,000 student services exemption. None if no treaty "
-            "benefit is claimed."
+            "The specific treaty article that grants the primary exemption, "
+            "e.g. '21(2)' for India's standard-deduction equivalent or '20(b)' "
+            "for China's scholarship exemption. Reflects the article tied to "
+            "the largest applied exempt amount."
         ),
     )
 
@@ -226,19 +306,36 @@ class TreatyState(BaseModel):
         default=0.0,
         ge=0.0,
         description=(
-            "Dollar amount of income actually exempted under the treaty "
-            "article for this tax year. For example, under the India treaty "
-            "Article 21(2), up to $5,000 of student wages may be exempt. "
-            "This value is subtracted from gross income before applying "
-            "graduated tax brackets."
+            "Total dollar amount of income exempted under treaty article(s) "
+            "for this tax year, summed across all matching articles. "
+            "Subtracted from gross income before applying graduated tax brackets."
         ),
     )
 
     applied_to_category: Optional[str] = Field(
         default=None,
         description=(
-            "The category the treaty applies to, e.g., 'scholarship' or 'teaching_research', "
-            "so L6 knows which income bucket to deduct from."
+            "Primary treaty category, e.g. 'scholarship_fellowship', "
+            "'student_personal_services', 'teaching_research'."
+        ),
+    )
+
+    applied_benefits: List[dict] = Field(
+        default_factory=list,
+        description=(
+            "Per-article list of applied benefits. Each entry has keys: "
+            "country_iso2, country_name, article_id, category, exempt_amount, "
+            "rate_override, applies_after_saving_clause, requires_form_8833, explanation. "
+            "Multi-article countries (China, India) will have multiple entries."
+        ),
+    )
+
+    requires_form_8833: bool = Field(
+        default=False,
+        description=(
+            "True if any applied benefit triggers a Form 8833 disclosure "
+            "under IRC §6114, considering per-article thresholds and the "
+            "Notice 2010-21 exception. Drives forms_required population."
         ),
     )
 
@@ -293,6 +390,60 @@ class FicaState(BaseModel):
             "(incorrect_ss_withheld > 0 OR incorrect_medicare_withheld > 0). "
             "The employer must first refuse to issue the refund directly."
         ),
+    )
+
+
+class NYTaxState(BaseModel):
+    """L9 — New York state, NYC, and Yonkers tax results.
+
+    NY runs its own residency test (separate from federal SPT) and does NOT
+    honor federal tax treaties — federal treaty exemptions are added back to
+    NY taxable income.
+    """
+
+    residency_status: Literal["resident", "part_year", "nonresident", "pending"] = Field(
+        default="pending",
+        description=(
+            "NY residency classification under NY Tax Law §605. 'nonresident' "
+            "is the default for F-1 students living in dorms (Knight case)."
+        ),
+    )
+    residency_reason: str = Field(
+        default="",
+        description="Plain-English explanation of why this status was chosen.",
+    )
+    days_in_ny: int = Field(default=0, ge=0, le=366)
+    nyc_resident: bool = Field(default=False)
+    yonkers_resident: bool = Field(default=False)
+
+    ny_source_wages: float = Field(default=0.0, ge=0.0)
+    ny_source_1042s_gross: float = Field(default=0.0, ge=0.0)
+    ny_source_income: float = Field(default=0.0, ge=0.0)
+    ny_income_percentage: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    ny_agi: float = Field(default=0.0, ge=0.0)
+    ny_treaty_addback: float = Field(default=0.0, ge=0.0)
+    ny_standard_deduction: float = Field(default=0.0, ge=0.0)
+    ny_taxable_income: float = Field(default=0.0, ge=0.0)
+    ny_tax_resident_basis: float = Field(default=0.0, ge=0.0)
+    ny_tax_apportioned: float = Field(default=0.0, ge=0.0)
+    nyc_tax: float = Field(default=0.0, ge=0.0)
+    yonkers_tax: float = Field(default=0.0, ge=0.0)
+    total_ny_state_local: float = Field(default=0.0, ge=0.0)
+
+    ny_withholding: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="NY state income tax withheld (W-2 Box 17 totals).",
+    )
+    nyc_withholding: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="NYC / locality income tax withheld (W-2 Box 19 totals).",
+    )
+    ny_refund_or_owed: float = Field(
+        default=0.0,
+        description="Positive = filer owes NY; negative = NY refund.",
     )
 
 
@@ -380,6 +531,10 @@ class ReturnStateObject(BaseModel):
     """
 
     # ── Processing layer sub-models ────────────────────────────────────
+    identity: TaxpayerIdentityState = Field(
+        default_factory=TaxpayerIdentityState,
+        description="Demographic and identifier fields (intake-populated).",
+    )
     residency: ResidencyState = Field(
         default_factory=ResidencyState,
         description="L1 output: tax residency determination.",
@@ -399,6 +554,100 @@ class ReturnStateObject(BaseModel):
     tax: TaxCalculatedState = Field(
         default_factory=TaxCalculatedState,
         description="L6 output (part 2): computed tax liability and refund.",
+    )
+    ny: NYTaxState = Field(
+        default_factory=NYTaxState,
+        description="L9 output: NY state, NYC, and Yonkers tax results.",
+    )
+
+    # ── Pipeline-level constants ──────────────────────────────────────
+    tax_year: int = Field(
+        default=2025,
+        ge=2024,
+        description="Calendar year the return is for (e.g., 2025 for returns filed in 2026).",
+    )
+    filing_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Opaque identifier for this filing — used to name audit log files "
+            "and resume in-progress returns. Set by the orchestrator or API."
+        ),
+    )
+
+    # ── Phase-7 reliability surface ───────────────────────────────────
+    audit_trail: List[dict] = Field(
+        default_factory=list,
+        description=(
+            "Chronological list of AuditEntry dicts (layer, function, "
+            "timestamp, inputs/outputs hashes, rationale). Mutated by "
+            ":func:`src.orchestrator.audit.record`. Drives the 'Why this "
+            "number?' UI and IRS-notice response workflow."
+        ),
+    )
+    requires_human_review: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Human-readable reasons why a CPA must review the return before "
+            "filing. Populated by post-layer validators in "
+            ":mod:`src.orchestrator.validators` and by the LLM safety wrapper. "
+            "The engine refuses to set ``ready_for_assembly=True`` while "
+            "this list is non-empty unless the API caller explicitly "
+            "acknowledges each item."
+        ),
+    )
+
+    # ── Withholding reconciliation report (Phase 2) ───────────────────
+    withholding_report: dict = Field(
+        default_factory=dict,
+        description=(
+            "Aggregated withholding totals across all sources (W-2 box 2, "
+            "1042-S box 7a Ch 3/4, 1099-* box 4, estimated payments). "
+            "Produced by :func:`src.functions.withholding_reconciler.reconcile`. "
+            "Keys: federal_w2, federal_1042s_ch3, federal_1042s_ch4, federal_1099, "
+            "federal_estimated_payments, federal_total, ss_withheld_w2, "
+            "medicare_withheld_w2, state_income_tax_w2, local_income_tax_w2, "
+            "sources_seen."
+        ),
+    )
+
+    # ── Schedule A (NRA) itemized deductions (Phase 2) ────────────────
+    sch_a: dict = Field(
+        default_factory=dict,
+        description=(
+            "NRA Schedule A result: state_local_income_tax (capped at $10k), "
+            "charitable_cash, charitable_noncash, casualty_disaster_loss, "
+            "other_itemized, total, disallowed_items[]. Populated by "
+            ":func:`src.functions.sch_a_nra.compute_sch_a_nra`."
+        ),
+    )
+
+    # ── AMT / Form 6251 (Phase 3) ──────────────────────────────────────
+    amt: dict = Field(
+        default_factory=dict,
+        description=(
+            "Alternative Minimum Tax result: amti, exemption, "
+            "tentative_minimum_tax, regular_tax_for_amt, amt_owed, binds. "
+            "Populated by :class:`AMTCalculator`."
+        ),
+    )
+
+    # ── ITIN / Form W-7 eligibility (Phase 3) ──────────────────────────
+    itin_eligibility: dict = Field(
+        default_factory=dict,
+        description=(
+            "ITIN application/renewal result: needs_w7, reason_code, "
+            "is_renewal, explanation. Drives Form W-7 attachment."
+        ),
+    )
+
+    # ── Estimated tax penalty / Form 2210 (Phase 3) ────────────────────
+    estimated_tax_penalty: dict = Field(
+        default_factory=dict,
+        description=(
+            "Form 2210 result: safe_harbor_met, safe_harbor_reason, "
+            "penalty_amount, must_attach_form_2210. Worst-case estimate "
+            "produced by :func:`estimated_tax_penalty.evaluate`."
+        ),
     )
 
     # ── Assembly metadata ──────────────────────────────────────────────

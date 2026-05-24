@@ -1,0 +1,17 @@
+{
+  "country_name": "Hungary",
+  "iso2": "HU",
+  "treaty_in_force": false,
+  "treaty_effective_date": null,
+  "saving_clause": {
+    "exists": false,
+    "cite": null,
+    "exception_paragraph": null
+  },
+  "articles": [],
+  "notes": [
+    "TREATY TERMINATED. US Treasury notified Hungary on July 8, 2022; treaty ceased to have effect for withholding taxes on January 1, 2024, and for other taxes for periods beginning on/after January 1, 2024. No treaty benefits for TY2024+. Hungarian students must follow default NRA rules.",
+    "AUDIT 2025-05-19: Verified treaty-not-in-force flag against the US Treasury notice of termination (July 2022, effective January 1, 2024). Hungarian filers must follow default NRA rules for TY2024 and later \u2014 no treaty benefits."
+  ],
+  "verified_against_pub901": true
+}

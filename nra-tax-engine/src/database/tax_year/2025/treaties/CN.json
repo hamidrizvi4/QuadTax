@@ -1,0 +1,76 @@
+{
+  "country_name": "China (People's Republic of)",
+  "iso2": "CN",
+  "treaty_in_force": true,
+  "treaty_effective_date": "1987-01-01",
+  "saving_clause": {
+    "exists": true,
+    "cite": "Article 23(1)",
+    "exception_paragraph": "Protocol paragraph 2 preserves Article 20 benefits for individuals even after they become US residents."
+  },
+  "articles": [
+    {
+      "article_id": "19",
+      "category": "teaching_research",
+      "covered_visas": [
+        "J-1",
+        "H-1B"
+      ],
+      "max_dollar_cap": null,
+      "max_year_cap": 3,
+      "year_counting_rule": "from_first_arrival",
+      "source_restriction": "us_source_only",
+      "saving_clause_exception": false,
+      "saving_clause_exception_cite": null,
+      "requires_form_8833_if_over": 0.0,
+      "notice_2010_21_exception": false,
+      "pub901_table_ref": "Table 2, China, row 'Teaching / Research'",
+      "note": "Article 19 covers visiting professors/researchers for up to 3 years from first arrival. Once the 3-year window closes, the article does NOT apply retroactively."
+    },
+    {
+      "article_id": "20(b)",
+      "category": "scholarship_fellowship",
+      "covered_visas": [
+        "F-1",
+        "J-1",
+        "M-1",
+        "Q-1"
+      ],
+      "max_dollar_cap": null,
+      "max_year_cap": null,
+      "year_counting_rule": "none",
+      "source_restriction": "any_source",
+      "saving_clause_exception": true,
+      "saving_clause_exception_cite": "US-China Protocol paragraph 2",
+      "requires_form_8833_if_over": 10000.0,
+      "notice_2010_21_exception": false,
+      "pub901_table_ref": "Table 3, China",
+      "note": "Scholarship/fellowship from any source — unlimited duration, survives saving clause."
+    },
+    {
+      "article_id": "20(c)",
+      "category": "student_personal_services",
+      "covered_visas": [
+        "F-1",
+        "J-1",
+        "M-1",
+        "Q-1"
+      ],
+      "max_dollar_cap": 5000.0,
+      "max_year_cap": null,
+      "year_counting_rule": "none",
+      "source_restriction": "us_source_only",
+      "saving_clause_exception": true,
+      "saving_clause_exception_cite": "US-China Protocol paragraph 2",
+      "requires_form_8833_if_over": 0.0,
+      "notice_2010_21_exception": false,
+      "pub901_table_ref": "Table 2, China",
+      "note": "$5,000/yr cap on student wages; no year limit; survives saving clause. Form 8833 generally required by IRS practice even though under $10k."
+    }
+  ],
+  "notes": [
+    "China treaty applies to mainland PRC only; does not cover Hong Kong or Taiwan.",
+    "AUDIT 2025-05-19: Verified all three articles against IRS Pub 901 Tables 2 & 3 and US-PRC Income Tax Treaty (1984) plus 1986 Protocol. Article 19 covers teachers/researchers for 3 years from arrival with no saving-clause survival. Articles 20(b) (scholarships) and 20(c) ($5,000 student wages) BOTH carry the protocol-paragraph-2 saving-clause exception, so the benefit continues after the F-1 holder becomes a resident alien under SPT — a feature unique to the China treaty among major partners."
+  ],
+  "verified_against_pub901": true
+}

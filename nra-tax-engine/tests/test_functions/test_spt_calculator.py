@@ -117,3 +117,74 @@ class TestSubstantialPresenceCalculator:
         calc = SubstantialPresenceCalculator()
         res = calc._compute_spt_days(100, 100, 100)
         assert res == 149
+
+
+class TestDualStatusDetection:
+    """Phase 2: ``evaluate_residency_with_status_change`` arrival/departure paths."""
+
+    def setup_method(self):
+        from datetime import date
+
+        self.calc = SubstantialPresenceCalculator()
+        self.date = date
+
+    def test_exempt_individual_never_dual_status(self):
+        """An F-1 within the 5-year window is NRA all year — never dual-status."""
+        result = self.calc.evaluate_residency_with_status_change(
+            tax_year=2025,
+            visa_type="F-1",
+            first_us_arrival_year=2024,
+            days_present_current_year=300,
+            days_present_minus_1=200,
+            days_present_minus_2=0,
+            first_day_in_us_current_year=self.date(2025, 6, 1),
+        )
+        assert result["is_dual_status"] is False
+        assert result["status"] == "nonresident_alien"
+        assert result["residency_start_date"] is None
+
+    def test_arrival_year_dual_status(self):
+        """H-1B arriving August 2025 with prior US presence — RA partway, NRA Jan-July."""
+        result = self.calc.evaluate_residency_with_status_change(
+            tax_year=2025,
+            visa_type="H-1B",
+            first_us_arrival_year=2020,
+            days_present_current_year=200,
+            days_present_minus_1=200,
+            days_present_minus_2=200,
+            first_day_in_us_current_year=self.date(2025, 8, 1),
+            prior_visa_was_resident=False,
+        )
+        assert result["is_dual_status"] is True
+        assert result["status"] == "dual_status"
+        assert result["residency_start_date"] == "2025-08-01"
+
+    def test_departure_year_dual_status(self):
+        """Departing September 2025 after being RA last year — RA through Sept, NRA after."""
+        result = self.calc.evaluate_residency_with_status_change(
+            tax_year=2025,
+            visa_type="H-1B",
+            first_us_arrival_year=2020,
+            days_present_current_year=250,
+            days_present_minus_1=365,
+            days_present_minus_2=365,
+            last_day_in_us_current_year=self.date(2025, 9, 30),
+            prior_visa_was_resident=True,
+        )
+        assert result["is_dual_status"] is True
+        assert result["residency_end_date"] == "2025-09-30"
+
+    def test_full_year_resident_not_dual_status(self):
+        """RA all year with no arrival or departure mid-year — straight RA, not dual."""
+        result = self.calc.evaluate_residency_with_status_change(
+            tax_year=2025,
+            visa_type="H-1B",
+            first_us_arrival_year=2020,
+            days_present_current_year=365,
+            days_present_minus_1=365,
+            days_present_minus_2=365,
+            first_day_in_us_current_year=self.date(2025, 1, 1),
+            prior_visa_was_resident=True,
+        )
+        assert result["is_dual_status"] is False
+        assert result["status"] == "resident_alien"

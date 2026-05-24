@@ -1,0 +1,17 @@
+{
+  "country_name": "Australia",
+  "iso2": "AU",
+  "treaty_in_force": true,
+  "treaty_effective_date": "1983-10-31",
+  "saving_clause": {
+    "exists": true,
+    "cite": null,
+    "exception_paragraph": null
+  },
+  "articles": [],
+  "notes": [
+    "Australia treaty does not provide a student wage exemption. Students may still claim \u00a7117 qualified-scholarship exclusion (statutory, not treaty).",
+    "AUDIT 2025-05-19: Confirmed the US-Australia Income Tax Convention (1982) does NOT include a student wage exemption article. Australian students rely on \u00a7117 qualified-scholarship exclusion plus default NRA rules."
+  ],
+  "verified_against_pub901": true
+}

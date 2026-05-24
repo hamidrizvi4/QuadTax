@@ -1,78 +1,132 @@
-"""Tests for the L4 Treaty Agent."""
+"""Tests for the L4 Treaty Agent (Phase 1: multi-article evaluator)."""
 
 from unittest.mock import MagicMock
-import pytest
 
 from src.agents.l4_treaty import TreatyAgent, TreatyCategoryMapping
 from src.orchestrator.state import ReturnStateObject
 
 
-class TestTreatyAgent:
-    """Test suite for the LLM-powered Treaty semantic routing Agent."""
+def _mock_classifier(category: str) -> MagicMock:
+    """Build a mock OpenAI client that returns the given mapped_category."""
+    mock_client = MagicMock()
+    mock_completion = MagicMock()
+    mock_completion.choices = [MagicMock()]
+    mock_completion.choices[0].message.parsed = TreatyCategoryMapping(
+        mapped_category=category  # type: ignore[arg-type]
+    )
+    mock_client.beta.chat.completions.parse.return_value = mock_completion
+    return mock_client
 
-    def test_process_treaties_teaching_research(self):
-        """Verify the agent routes a teaching role to the evaluator and mutates state."""
-        
-        # 1. Mock the OpenAI Client
-        mock_client = MagicMock()
-        mock_completion = MagicMock()
-        
-        # Setup the fake parsed LLM response mapping to 'teaching_research'
-        fake_mapping = TreatyCategoryMapping(mapped_category="teaching_research")
-        
-        mock_completion.choices = [MagicMock()]
-        mock_completion.choices[0].message.parsed = fake_mapping
-        
-        # Attach the mock to the client's parse method
-        mock_client.beta.chat.completions.parse.return_value = mock_completion
 
-        # 2. Instantiate Agent
-        agent = TreatyAgent(llm_client=mock_client)
-        
-        # 3. Prepare the dummy state
+class TestL4TreatyAgent:
+    def test_china_teaching_research_within_window(self):
+        """Chinese J-1 researcher in year 2 with $30k ECI — Art 19 fully exempts."""
+        client = _mock_classifier("teaching_research")
+        agent = TreatyAgent(llm_client=client)
+
         state = ReturnStateObject()
         state.residency.status = "nonresident_alien"
+        state.residency.exempt_visa_type = "J-1"
         state.residency.years_in_exempt_status = 2
-        state.income.eci_taxable_total = 30000.0  # teaching_research explicitly checks ECI
+        state.income.eci_taxable_total = 30000.0
 
-        # 4. Execute the agent process
-        updated_state = agent.process_treaties(
+        updated = agent.process_treaties(
             tax_residence_country="China",
-            income_description="PhD Teaching Assistant Part Time",
+            income_description="Visiting researcher at MIT",
             current_state=state,
         )
 
-        # 5. Assert the LLM was called safely
-        mock_client.beta.chat.completions.parse.assert_called_once()
-        
-        # 6. Assess the deterministic mutations
-        # China's teaching/research article 19 grants unlimited exemption for 3 years
-        assert updated_state.treaty.is_eligible is True
-        assert updated_state.treaty.country == "China"
-        assert updated_state.treaty.article_number == "19"
-        assert updated_state.treaty.exempt_amount_applied == 30000.0 # Unlimited applied to ECI amount
-        
-        # Forms and Layer markers
-        assert "8833" in updated_state.forms_required
-        assert "L4" in updated_state.completed_layers
+        assert updated.treaty.is_eligible is True
+        assert updated.treaty.country == "CN"
+        assert updated.treaty.article_number == "19"
+        assert updated.treaty.exempt_amount_applied == 30000.0
+        assert "L4" in updated.completed_layers
+        assert "8833" in updated.forms_required
 
-    def test_process_treaties_skips_resident_alien(self):
-        """Ensure the agent short-circuits execution if the student is a resident alien."""
-        mock_client = MagicMock()
-        agent = TreatyAgent(llm_client=mock_client)
-        
+    def test_china_student_wages_5k_cap(self):
+        """Chinese F-1 in year 2 with $30k US wages — Art 20(c) caps at $5k."""
+        client = _mock_classifier("student_personal_services")
+        agent = TreatyAgent(llm_client=client)
+
         state = ReturnStateObject()
-        state.residency.status = "resident_alien" # Treaties generally skipped here
-        
-        updated_state = agent.process_treaties(
-            tax_residence_country="India",
-            income_description="Generic Work",
+        state.residency.status = "nonresident_alien"
+        state.residency.exempt_visa_type = "F-1"
+        state.residency.years_in_exempt_status = 2
+        state.income.eci_taxable_total = 30000.0
+
+        updated = agent.process_treaties(
+            tax_residence_country="CN",
+            income_description="On-campus dining hall worker",
             current_state=state,
         )
-        
-        # LLM MUST NOT BE CALLED
-        mock_client.beta.chat.completions.parse.assert_not_called()
-        
-        # Ensure it was marked skipped
-        assert "L4_Skipped" in updated_state.completed_layers
-        assert updated_state.treaty.is_eligible is False
+
+        assert updated.treaty.is_eligible is True
+        assert updated.treaty.article_number == "20(c)"
+        assert updated.treaty.exempt_amount_applied == 5000.0
+        assert updated.treaty.requires_form_8833 is True
+
+    def test_unknown_country_skips(self):
+        """An unrecognized country falls through to skip."""
+        client = _mock_classifier("student_personal_services")
+        agent = TreatyAgent(llm_client=client)
+        state = ReturnStateObject()
+        state.residency.status = "nonresident_alien"
+        state.residency.exempt_visa_type = "F-1"
+        state.residency.years_in_exempt_status = 1
+        state.income.eci_taxable_total = 20000.0
+
+        updated = agent.process_treaties(
+            tax_residence_country="Vulcan",  # nonexistent
+            income_description="Tutor",
+            current_state=state,
+        )
+
+        # Classifier should not even be invoked — but if it is, no benefits applied.
+        assert updated.treaty.is_eligible is False
+        # Either L4 or L4_Skipped is acceptable for this branch.
+        assert (
+            "L4_Skipped" in updated.completed_layers
+            or "L4" in updated.completed_layers
+        )
+
+    def test_resident_alien_without_saving_clause_skips(self):
+        """Resident alien whose country has NO saving-clause exception → skip."""
+        client = _mock_classifier("student_personal_services")
+        agent = TreatyAgent(llm_client=client)
+
+        state = ReturnStateObject()
+        state.residency.status = "resident_alien"
+        state.residency.exempt_visa_type = "F-1"
+        # Pick a country whose articles do NOT have saving_clause_exception.
+        # Korea Article 21(1) has saving_clause_exception=True per our seeding, so use Germany
+        # (DE 20(4) defaults to saving_clause_exception=False).
+        updated = agent.process_treaties(
+            tax_residence_country="DE",
+            income_description="Campus job",
+            current_state=state,
+        )
+        assert "L4_Skipped" in updated.completed_layers
+        client.beta.chat.completions.parse.assert_not_called()
+
+    def test_china_resident_alien_saving_clause_keeps_benefit(self):
+        """Chinese student in year 6 (resident alien) keeps Art 20(c) via saving clause."""
+        client = _mock_classifier("student_personal_services")
+        agent = TreatyAgent(llm_client=client)
+
+        state = ReturnStateObject()
+        state.residency.status = "resident_alien"
+        state.residency.exempt_visa_type = "F-1"
+        state.residency.years_in_exempt_status = 6
+        state.income.eci_taxable_total = 30000.0
+
+        updated = agent.process_treaties(
+            tax_residence_country="CN",
+            income_description="On-campus worker",
+            current_state=state,
+        )
+        assert updated.treaty.is_eligible is True
+        assert updated.treaty.article_number == "20(c)"
+        # Saving-clause exception flag should be true on at least one benefit.
+        assert any(
+            b.get("applies_after_saving_clause") for b in updated.treaty.applied_benefits
+        )

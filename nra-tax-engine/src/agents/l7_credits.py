@@ -1,9 +1,9 @@
-"""
-L7 Credits Agent — Reconciles withholdings against tax liabilities.
+"""L7 Credits Agent — Reconciles all federal withholding against tax liability.
 
-Calculates the final federal balance (refund or amount owed) by adding
-up all tax credits (W-2 and 1042-S withholdings) and subtracting them
-from the mathematically determined total tax liability.
+Phase 2: this layer now consumes the full :class:`WithholdingReport`
+produced by L3 instead of only summing W-2 + 1042-S withholding. The
+report aggregates 1099-INT/DIV/B/MISC withholding and estimated tax
+payments, both of which are common for NRAs with US investments.
 """
 
 from __future__ import annotations
@@ -15,36 +15,24 @@ if TYPE_CHECKING:
 
 
 class CreditsAgent:
-    """Deterministic orchestrator for federal credit resolution."""
+    """Deterministic federal-credit resolver (refund vs balance due)."""
 
-    def process_credits(self, current_state: ReturnStateObject) -> ReturnStateObject:
-        """Add all available credits and resolve final amount owed/refunded.
+    def process_credits(self, current_state: "ReturnStateObject") -> "ReturnStateObject":
+        """Add every available federal credit and resolve the refund/owed line."""
+        report = current_state.withholding_report
+        if report:
+            # Trust the reconciler if L3 produced one.
+            total_credits = float(report.get("federal_total", 0.0))
+        else:
+            # Backward-compat: legacy callers may bypass the reconciler.
+            total_credits = (
+                current_state.income.total_w2_withholding
+                + current_state.income.total_1042s_withholding
+            )
 
-        Args:
-            current_state: State object holding liability and withholding metrics.
-
-        Returns:
-            Updated state object with finalized tax calculations.
-        """
-        # ==========================================
-        # 1. Tally Total Credits
-        # ==========================================
-        total_credits = (
-            current_state.income.total_w2_withholding + 
-            current_state.income.total_1042s_withholding
-        )
-
-        # ==========================================
-        # 2. Determine Ledger Balance
-        # ==========================================
-        # If liability - credits is positive, they owe money.
-        # If liability - credits is negative, they get a refund.
         current_state.tax.total_withholding_credits = total_credits
-        current_state.tax.refund_or_owed = current_state.tax.total_tax_liability - total_credits
-
-        # ==========================================
-        # 3. State Mutation
-        # ==========================================
+        current_state.tax.refund_or_owed = (
+            current_state.tax.total_tax_liability - total_credits
+        )
         current_state.mark_layer_complete("L7")
-
         return current_state
