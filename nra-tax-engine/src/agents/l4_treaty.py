@@ -227,8 +227,17 @@ class TreatyAgent:
             return
 
         primary = max(benefits, key=lambda b: b.exempt_amount)
-        total = sum(b.exempt_amount for b in benefits)
         any_8833 = any(b.requires_form_8833 for b in benefits)
+
+        # ``exempt_amount_applied`` is the total income EXEMPTED by treaty (drives
+        # 1040-NR line 1k and Schedule OI Item L). India Article 21(2) is a
+        # standard-DEDUCTION equivalent, not an income exemption — it must NOT
+        # be summed here or it would wrongly appear as exempt wages on the form.
+        total = sum(
+            b.exempt_amount
+            for b in benefits
+            if not _is_india_standard_deduction(b)
+        )
 
         state.treaty.is_eligible = True
         state.treaty.article_number = primary.article_id
@@ -238,6 +247,11 @@ class TreatyAgent:
 
         if any_8833 and "8833" not in state.forms_required:
             state.forms_required.append("8833")
+
+
+def _is_india_standard_deduction(benefit: AppliedTreatyBenefit) -> bool:
+    """True for the India Art 21(2) benefit — a deduction, not an income exemption."""
+    return benefit.country_iso2 == "IN" and benefit.article_id == "21(2)"
 
 
 # ---------------------------------------------------------------------------

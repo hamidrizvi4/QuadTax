@@ -22,6 +22,12 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
 
     treaty_rows: List[dict] = []
     for benefit in treaty.applied_benefits:
+        # India Article 21(2) is a standard-DEDUCTION equivalent claimed on
+        # 1040-NR line 12, NOT an income exemption — it does not belong in the
+        # Item L treaty-exempt-income table (listing the full wages here would
+        # wrongly imply they were exempt from tax).
+        if benefit.get("country_iso2") == "IN" and benefit.get("article_id") == "21(2)":
+            continue
         treaty_rows.append(
             {
                 "country": benefit.get("country_name", ""),
