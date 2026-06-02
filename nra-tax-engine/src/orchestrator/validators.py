@@ -45,6 +45,13 @@ def validate_post_l1(state: "ReturnStateObject") -> List[str]:
             state,
             f"L1: years_in_exempt_status ({residency.years_in_exempt_status}) is implausible.",
         )
+    if residency.status == "dual_status":
+        _flag(
+            state,
+            "L1: Dual-status return detected — residency changed mid-year. "
+            "QuadTax computes the NRA portion only. A CPA must verify the "
+            "resident-alien portion separately (Form 1040 + Form 1040-NR).",
+        )
     return state.requires_human_review
 
 

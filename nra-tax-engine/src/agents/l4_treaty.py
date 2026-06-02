@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from src.agents._llm_safety import safe_parse
 from src.functions.treaty_evaluator import TreatyEvaluator
 from src.functions.treaty_schema import AppliedTreatyBenefit, TreatyCategory
 
@@ -62,13 +63,14 @@ class TreatyCategoryMapping(BaseModel):
 class TreatyAgent:
     """LLM-powered classifier + deterministic treaty applicator."""
 
-    def __init__(self, llm_client: Any = None):
+    def __init__(self, llm_client: Any = None, secondary_llm_client: Any = None):
         if llm_client is None:
             from openai import OpenAI
 
             self.llm_client = OpenAI()
         else:
             self.llm_client = llm_client
+        self.secondary_llm_client = secondary_llm_client
 
     # ------------------------------------------------------------------
     # LLM classification
@@ -84,16 +86,18 @@ class TreatyAgent:
             "Use 'foreign_source_remittance' when the income comes from outside the US. "
             "Return 'none' if no treaty category fits."
         )
-        completion = self.llm_client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+        result = safe_parse(
+            primary_client=self.llm_client,
+            primary_model="gpt-4o-2024-08-06",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Income description:\n{income_description}"},
             ],
             response_format=TreatyCategoryMapping,
-            temperature=0.0,
+            secondary_client=self.secondary_llm_client,
+            secondary_model="gpt-4o-mini" if self.secondary_llm_client else None,
         )
-        return completion.choices[0].message.parsed.mapped_category
+        return result.mapped_category
 
     # ------------------------------------------------------------------
     # State mutation

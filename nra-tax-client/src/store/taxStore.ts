@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 import type { components } from '@/lib/api-types';
 
@@ -11,15 +12,23 @@ type IntakeNYContext = components['schemas']['IntakeNYContext'];
 type IntakePayload = components['schemas']['IntakePayload'];
 type IntakeResidency = components['schemas']['IntakeResidency'];
 
-/** Legacy results shape preserved so Phase-2 pages compile against Phase-6 API. */
 export interface ResultsView {
   taxLiability: number | null;
   refundOrOwed: number | null;
   requiresFicaClaim: boolean | null;
   generatedForms: string[];
+  // Extended fields from TaxProcessResponse
+  nyRefundOrOwed: number;
+  ficaRefundAmount: number;
+  requiresHumanReview: string[];
+  federalPacketPath: string | null;
+  nyPacketPath: string | null;
+  ficaPacketPath: string | null;
+  completedLayers: string[];
+  narrativeSections: Record<string, string>;
 }
 
-// Default seeds. Keep these in sync with nra-tax-engine/src/intake/intake_schema.py.
+// Default seeds — kept in sync with nra-tax-engine/src/intake/intake_schema.py.
 
 const initialIdentity: IntakeIdentity = {
   first_name: '',
@@ -107,8 +116,22 @@ const initialElections: IntakeElections = {
   closer_connection_exception_claimed: false,
 };
 
-// Legacy MCQ shape kept for backwards-compat with the Phase-2 intake pages.
-// New code should read from `identity`, `residency`, `income` directly.
+const initialResults: ResultsView = {
+  taxLiability: null,
+  refundOrOwed: null,
+  requiresFicaClaim: null,
+  generatedForms: [],
+  nyRefundOrOwed: 0,
+  ficaRefundAmount: 0,
+  requiresHumanReview: [],
+  federalPacketPath: null,
+  nyPacketPath: null,
+  ficaPacketPath: null,
+  completedLayers: [],
+  narrativeSections: {},
+};
+
+// Legacy MCQ shape kept for backwards-compat with Phase-2 intake pages.
 export interface LegacyMcqAnswers {
   tax_year: number;
   visa_type: string;
@@ -128,6 +151,7 @@ export interface TaxState {
   banking: IntakeBanking;
   elections: IntakeElections;
 
+  // File refs — not persisted (can't serialize File objects)
   i94File: File | null;
   w2Files: File[];
   form1042sFiles: File[];
@@ -145,6 +169,8 @@ export interface TaxState {
   setI94File: (file: File | null) => void;
   addW2File: (file: File) => void;
   addForm1042sFile: (file: File) => void;
+  removeW2File: (index: number) => void;
+  removeForm1042sFile: (index: number) => void;
 
   setResults: (results: ResultsView) => void;
   reset: () => void;
@@ -159,55 +185,9 @@ export interface TaxState {
   resetFastStore: () => void;
 }
 
-export const useTaxStore = create<TaxState>((set, get) => ({
-  identity: { ...initialIdentity },
-  residency: { ...initialResidency },
-  income: { ...initialIncome },
-  ny: null,
-  fica: { ...initialFICA },
-  banking: { ...initialBanking },
-  elections: { ...initialElections },
-
-  i94File: null,
-  w2Files: [],
-  form1042sFiles: [],
-
-  results: {
-    taxLiability: null,
-    refundOrOwed: null,
-    requiresFicaClaim: null,
-    generatedForms: [],
-  },
-
-  updateIdentity: (updates) =>
-    set((state) => ({ identity: { ...state.identity, ...updates } })),
-  updateResidency: (updates) =>
-    set((state) => ({ residency: { ...state.residency, ...updates } })),
-  updateIncome: (updates) =>
-    set((state) => ({ income: { ...state.income, ...updates } })),
-  updateNY: (updates) =>
-    set((state) => {
-      if (updates === null) return { ny: null };
-      const base = state.ny ?? { ...initialNY };
-      return { ny: { ...base, ...updates } };
-    }),
-  updateFICA: (updates) =>
-    set((state) => ({ fica: { ...state.fica, ...updates } })),
-  updateBanking: (updates) =>
-    set((state) => ({ banking: { ...state.banking, ...updates } })),
-  updateElections: (updates) =>
-    set((state) => ({ elections: { ...state.elections, ...updates } })),
-
-  setI94File: (file) => set({ i94File: file }),
-  addW2File: (file) =>
-    set((state) => ({ w2Files: [...state.w2Files, file] })),
-  addForm1042sFile: (file) =>
-    set((state) => ({ form1042sFiles: [...state.form1042sFiles, file] })),
-
-  setResults: (results) => set({ results }),
-
-  reset: () =>
-    set({
+export const useTaxStore = create<TaxState>()(
+  persist(
+    (set, get) => ({
       identity: { ...initialIdentity },
       residency: { ...initialResidency },
       income: { ...initialIncome },
@@ -215,61 +195,119 @@ export const useTaxStore = create<TaxState>((set, get) => ({
       fica: { ...initialFICA },
       banking: { ...initialBanking },
       elections: { ...initialElections },
+
       i94File: null,
       w2Files: [],
       form1042sFiles: [],
-      results: {
-        taxLiability: null,
-        refundOrOwed: null,
-        requiresFicaClaim: null,
-        generatedForms: [],
+
+      results: { ...initialResults },
+
+      updateIdentity: (updates) =>
+        set((state) => ({ identity: { ...state.identity, ...updates } })),
+      updateResidency: (updates) =>
+        set((state) => ({ residency: { ...state.residency, ...updates } })),
+      updateIncome: (updates) =>
+        set((state) => ({ income: { ...state.income, ...updates } })),
+      updateNY: (updates) =>
+        set((state) => {
+          if (updates === null) return { ny: null };
+          const base = state.ny ?? { ...initialNY };
+          return { ny: { ...base, ...updates } };
+        }),
+      updateFICA: (updates) =>
+        set((state) => ({ fica: { ...state.fica, ...updates } })),
+      updateBanking: (updates) =>
+        set((state) => ({ banking: { ...state.banking, ...updates } })),
+      updateElections: (updates) =>
+        set((state) => ({ elections: { ...state.elections, ...updates } })),
+
+      setI94File: (file) => set({ i94File: file }),
+      addW2File: (file) =>
+        set((state) => ({ w2Files: [...state.w2Files, file] })),
+      addForm1042sFile: (file) =>
+        set((state) => ({ form1042sFiles: [...state.form1042sFiles, file] })),
+      removeW2File: (index) =>
+        set((state) => ({ w2Files: state.w2Files.filter((_, i) => i !== index) })),
+      removeForm1042sFile: (index) =>
+        set((state) => ({ form1042sFiles: state.form1042sFiles.filter((_, i) => i !== index) })),
+
+      setResults: (results) => set({ results }),
+
+      reset: () =>
+        set({
+          identity: { ...initialIdentity },
+          residency: { ...initialResidency },
+          income: { ...initialIncome },
+          ny: null,
+          fica: { ...initialFICA },
+          banking: { ...initialBanking },
+          elections: { ...initialElections },
+          i94File: null,
+          w2Files: [],
+          form1042sFiles: [],
+          results: { ...initialResults },
+        }),
+
+      buildIntakePayload: () => {
+        const s = get();
+        return {
+          identity: s.identity,
+          residency: s.residency,
+          income: s.income,
+          ny: s.ny,
+          fica: s.fica,
+          banking: s.banking,
+          elections: s.elections,
+        };
       },
-    }),
 
-  buildIntakePayload: () => {
-    const s = get();
-    return {
-      identity: s.identity,
-      residency: s.residency,
-      income: s.income,
-      ny: s.ny,
-      fica: s.fica,
-      banking: s.banking,
-      elections: s.elections,
-    };
-  },
-
-  // --- Legacy back-compat (Phase-2 intake pages still reference these) ---
-  get mcqAnswers(): LegacyMcqAnswers {
-    const s = get();
-    return {
-      tax_year: s.residency.tax_year,
-      visa_type: s.residency.visa_type,
-      first_us_arrival_year: s.residency.first_us_arrival_year,
-      tax_residence_country: s.identity.country_of_tax_residence,
-      income_description: s.income.income_description,
-      requires_services: s.income.requires_services,
-      is_qualified_expense: s.income.is_qualified_expense,
-    };
-  },
-  updateMcqAnswers: (updates) =>
-    set((state) => {
-      const identity = { ...state.identity };
-      const residency = { ...state.residency };
-      const income = { ...state.income };
-      if (updates.tax_year !== undefined) residency.tax_year = updates.tax_year;
-      if (updates.visa_type !== undefined) residency.visa_type = updates.visa_type;
-      if (updates.first_us_arrival_year !== undefined)
-        residency.first_us_arrival_year = updates.first_us_arrival_year;
-      if (updates.tax_residence_country !== undefined)
-        identity.country_of_tax_residence = updates.tax_residence_country;
-      if (updates.income_description !== undefined)
-        income.income_description = updates.income_description;
-      if (updates.requires_services !== undefined)
-        income.requires_services = updates.requires_services;
-      if (updates.is_qualified_expense !== undefined)
-        income.is_qualified_expense = updates.is_qualified_expense;
-      return { identity, residency, income };
+      // --- Legacy back-compat ---
+      get mcqAnswers(): LegacyMcqAnswers {
+        const s = get();
+        return {
+          tax_year: s.residency.tax_year,
+          visa_type: s.residency.visa_type,
+          first_us_arrival_year: s.residency.first_us_arrival_year,
+          tax_residence_country: s.identity.country_of_tax_residence,
+          income_description: s.income.income_description,
+          requires_services: s.income.requires_services,
+          is_qualified_expense: s.income.is_qualified_expense,
+        };
+      },
+      updateMcqAnswers: (updates) =>
+        set((state) => {
+          const identity = { ...state.identity };
+          const residency = { ...state.residency };
+          const income = { ...state.income };
+          if (updates.tax_year !== undefined) residency.tax_year = updates.tax_year;
+          if (updates.visa_type !== undefined) residency.visa_type = updates.visa_type;
+          if (updates.first_us_arrival_year !== undefined)
+            residency.first_us_arrival_year = updates.first_us_arrival_year;
+          if (updates.tax_residence_country !== undefined)
+            identity.country_of_tax_residence = updates.tax_residence_country;
+          if (updates.income_description !== undefined)
+            income.income_description = updates.income_description;
+          if (updates.requires_services !== undefined)
+            income.requires_services = updates.requires_services;
+          if (updates.is_qualified_expense !== undefined)
+            income.is_qualified_expense = updates.is_qualified_expense;
+          return { identity, residency, income };
+        }),
+      resetFastStore: () => get().reset(),
     }),
-  resetFastStore: () => get().reset(),
-}));
+    {
+      name: 'quadtax-intake',
+      // File objects can't be serialized — exclude them from persistence
+      partialize: (state) => ({
+        identity: state.identity,
+        residency: state.residency,
+        income: state.income,
+        ny: state.ny,
+        fica: state.fica,
+        banking: state.banking,
+        elections: state.elections,
+        results: state.results,
+      }),
+    }
+  )
+);

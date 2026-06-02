@@ -95,7 +95,10 @@ class TaxCalculationAgent:
             determined_rate = 0.0
 
         # --- 4. Compute liability ----------------------------------------
-        calculator = TaxCalculator(tax_year=2025, filing_status="single")
+        calculator = TaxCalculator(
+            tax_year=current_state.tax_year,
+            filing_status=current_state.identity.filing_status,
+        )
         result = calculator.calculate_tax_liability(
             eci_taxable_income=net_eci,
             fdap_taxable_income=net_fdap,

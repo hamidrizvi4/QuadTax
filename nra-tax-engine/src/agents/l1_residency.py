@@ -9,11 +9,11 @@ the deterministic SubstantialPresenceCalculator for the actual IRS rules.
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from src.agents._llm_safety import safe_parse
 from src.functions.spt_calculator import SubstantialPresenceCalculator
 
 if TYPE_CHECKING:
@@ -35,12 +35,14 @@ class ResidencyAgent:
     to the deterministic calculation engine.
     """
 
-    def __init__(self, llm_client: Any = None):
+    def __init__(self, llm_client: Any = None, secondary_llm_client: Any = None):
         """Initialize the residency agent with an OpenAI client.
 
         Args:
             llm_client: An instance of the OpenAI client. If not provided,
                 it will attempt to initialize a default one.
+            secondary_llm_client: Optional second client used for dual-extract
+                cross-checking of critical numeric fields.
         """
         if llm_client is None:
             # Lazy import to avoid crash if no api key during setup without client
@@ -48,6 +50,7 @@ class ResidencyAgent:
             self.llm_client = OpenAI()
         else:
             self.llm_client = llm_client
+        self.secondary_llm_client = secondary_llm_client
 
     def process_residency(
         self,
@@ -82,18 +85,18 @@ class ResidencyAgent:
 
         user_prompt = f"i94_ocr_text:\n{i94_ocr_text}"
 
-        # Using structured outputs (requires openai>=1.40.0, which we have)
-        completion = self.llm_client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+        extracted_days: I94DayCountParams = safe_parse(
+            primary_client=self.llm_client,
+            primary_model="gpt-4o-2024-08-06",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             response_format=I94DayCountParams,
-            temperature=0.0,
+            secondary_client=self.secondary_llm_client,
+            secondary_model="gpt-4o-mini" if self.secondary_llm_client else None,
+            critical_fields=["days_current_year", "days_minus_1", "days_minus_2"],
         )
-
-        extracted_days: I94DayCountParams = completion.choices[0].message.parsed
 
         # 2. The Deterministic Handoff
         calculator = SubstantialPresenceCalculator()

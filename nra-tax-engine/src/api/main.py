@@ -62,6 +62,14 @@ class TaxProcessResponse(BaseModel):
             "Pass force_assembly=True on a subsequent call to override after review."
         ),
     )
+    narrative_sections: dict = Field(
+        default_factory=dict,
+        description=(
+            "Plain-English narrative sections keyed by section title. "
+            "Each value is a human-readable explanation of that portion of the return. "
+            "Empty dict when narrative generation is not available."
+        ),
+    )
 
 
 app = FastAPI(
@@ -143,6 +151,9 @@ def submit(request: SubmitRequest) -> TaxProcessResponse:
         output_dir=Path(request.output_dir),
     )
 
+    from src.narrative.generator import NarrativeGenerator
+    narrative = NarrativeGenerator().generate_sections(state)
+
     fica_total = (
         state.fica.incorrect_ss_withheld + state.fica.incorrect_medicare_withheld
     )
@@ -165,6 +176,7 @@ def submit(request: SubmitRequest) -> TaxProcessResponse:
             else None
         ),
         requires_human_review=list(state.requires_human_review),
+        narrative_sections=narrative,
     )
 
 
@@ -231,6 +243,7 @@ async def upload_and_process_endpoint(
         forms_required=list(final_state.forms_required),
         completed_layers=list(final_state.completed_layers),
         generated_form_outputs=list(_generated),
+        narrative_sections={},
     )
 
 

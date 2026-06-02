@@ -1,82 +1,307 @@
-"use client";
+'use client';
 
-import { useRouter } from "next/navigation";
-import { useTaxStore } from "@/store/taxStore";
-import { ChevronRight, ClipboardCheck, Sparkle } from "lucide-react";
+import { useRouter } from 'next/navigation';
+import { useTaxStore } from '@/store/taxStore';
+import { ChevronRight, ClipboardCheck, MapPin, Shield, CreditCard } from 'lucide-react';
+import { FormField, inputCls, selectCls } from '@/components/FormField';
 
-export default function ContextPage() {
-  const router = useRouter();
-  const { mcqAnswers, updateMcqAnswers } = useTaxStore();
-
-  const handleNext = () => {
-    router.push("/processing");
-  };
-
-  const Toggle = ({ value, onChange, label, sublabel }: any) => (
-    <div className="bg-white border border-slate-200 rounded-3xl p-5 flex items-center justify-between gap-4 shadow-sm">
-      <div className="flex-1">
-        <p className="font-bold text-slate-900 leading-snug">{label}</p>
+function Toggle({
+  value,
+  onChange,
+  label,
+  sublabel,
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  sublabel: string;
+}) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-sm">
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-slate-900 text-sm leading-snug">{label}</p>
         <p className="text-xs text-slate-500 mt-1 leading-relaxed">{sublabel}</p>
       </div>
       <button
+        type="button"
         onClick={() => onChange(!value)}
-        className={`shrink-0 w-16 h-10 rounded-full transition-all flex items-center p-1 ${
-          value ? "bg-blue-600" : "bg-slate-200"
+        className={`shrink-0 w-14 h-8 rounded-full transition-colors flex items-center p-1 ${
+          value ? 'bg-blue-600' : 'bg-slate-200'
         }`}
       >
-        <div className={`w-8 h-8 bg-white rounded-full shadow-md transition-all transform ${
-          value ? "translate-x-6" : "translate-x-0"
-        }`} />
+        <div
+          className={`w-6 h-6 bg-white rounded-full shadow-md transition-transform ${
+            value ? 'translate-x-6' : 'translate-x-0'
+          }`}
+        />
       </button>
     </div>
   );
+}
+
+function SectionHeader({
+  icon: Icon,
+  title,
+  subtitle,
+}: {
+  icon: React.ElementType;
+  title: string;
+  subtitle?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <div className="w-8 h-8 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
+        <Icon className="w-4 h-4 text-slate-600" />
+      </div>
+      <div>
+        <p className="text-sm font-bold text-slate-800">{title}</p>
+        {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+      </div>
+    </div>
+  );
+}
+
+export default function ContextPage() {
+  const router = useRouter();
+  const {
+    identity,
+    income,
+    updateIncome,
+    ny,
+    updateNY,
+    fica,
+    updateFICA,
+    banking,
+    updateBanking,
+  } = useTaxStore();
+
+  const isNY = identity.us_state === 'NY';
+
+  const handleNext = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Auto-initialise NY context if user is in NY but hasn't touched it
+    if (isNY && ny === null) {
+      updateNY({
+        days_in_ny: 0,
+        has_permanent_abode_in_ny: false,
+        abode_months_in_year: 0,
+        is_student_dorm: true,
+        domiciled_in_ny: false,
+        moved_into_ny_mid_year: false,
+        moved_out_of_ny_mid_year: false,
+        nyc_address: false,
+        yonkers_address: false,
+        ny_work_days: 0,
+        total_work_days: 0,
+        employer_in_ny: true,
+        institution_1042s_in_ny: true,
+      });
+    }
+    router.push('/processing');
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col p-6">
-      <header className="mb-10 text-center">
+    <div className="min-h-screen bg-slate-50 flex flex-col p-6 pb-28">
+      <header className="mb-8 text-center">
         <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3 shadow-lg shadow-blue-200">
           <ClipboardCheck className="text-white w-6 h-6" />
         </div>
         <h1 className="text-2xl font-bold text-slate-900">Final Verification</h1>
-        <p className="text-slate-500 text-sm mt-1">Nearly there. We just need to check two specific conditions for Treaty calculation.</p>
+        <p className="text-slate-500 text-sm mt-1">
+          A few specifics to maximise your refund.
+        </p>
       </header>
 
-      <div className="flex-1 max-w-md mx-auto w-full space-y-6">
-        
-        <Toggle
-          label="Services Required?"
-          sublabel="Does your funding require you to perform duties like teaching, research assistants, or grading?"
-          value={mcqAnswers.requires_services}
-          onChange={(val: boolean) => updateMcqAnswers({ requires_services: val })}
-        />
+      <form onSubmit={handleNext} className="max-w-md mx-auto w-full space-y-8">
 
-        <Toggle
-          label="Qualified Expenses?"
-          sublabel="Is this funding solely for tuition, fees, books, and required equipment? (No room & board)"
-          value={mcqAnswers.is_qualified_expense}
-          onChange={(val: boolean) => updateMcqAnswers({ is_qualified_expense: val })}
-        />
+        {/* ── Income Type ── */}
+        <section className="space-y-3">
+          <SectionHeader icon={ClipboardCheck} title="Income Classification" />
+          <Toggle
+            label="Services Required?"
+            sublabel="Does your funding require duties like teaching, research, or grading?"
+            value={income.requires_services}
+            onChange={(v) => updateIncome({ requires_services: v })}
+          />
+          <Toggle
+            label="Qualified Expenses Only?"
+            sublabel="Is this funding solely for tuition and required fees? (Not room & board)"
+            value={income.is_qualified_expense}
+            onChange={(v) => updateIncome({ is_qualified_expense: v })}
+          />
+        </section>
 
-        <div className="bg-slate-900/5 p-5 rounded-3xl space-y-3">
-          <div className="flex items-center gap-2 text-slate-800">
-            <Sparkle className="w-4 h-4 text-blue-600 animate-pulse" />
-            <span className="text-sm font-bold tracking-tight">AI Audit Shield Active</span>
-          </div>
-          <p className="text-xs text-slate-500 leading-normal italic">
-            "Your answers will be cross-referenced against your W-2 and 1042-S logic to ensure maximum IRS compliance."
-          </p>
-        </div>
+        {/* ── NY Section — only shown when us_state is NY ── */}
+        {isNY && (
+          <section className="space-y-3">
+            <SectionHeader
+              icon={MapPin}
+              title="New York State"
+              subtitle="NY does not honour federal treaties — extra details needed"
+            />
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-900 leading-relaxed">
+              NY adds back any federal treaty exemption to your NY taxable income. Student dorm
+              residents are classified as <strong>NY nonresidents</strong> (Knight case) — this
+              is beneficial and saves significant tax.
+            </div>
+            <Toggle
+              label="Do you live in a university dorm?"
+              sublabel="Dorm residents qualify as NY nonresidents under the Knight rule."
+              value={ny?.is_student_dorm ?? true}
+              onChange={(v) => updateNY({ is_student_dorm: v })}
+            />
+            <Toggle
+              label="NYC address? (not dorm)"
+              sublabel="NYC residents pay an additional city income tax (~3.9%)."
+              value={ny?.nyc_address ?? false}
+              onChange={(v) => updateNY({ nyc_address: v })}
+            />
+            <Toggle
+              label="Yonkers address?"
+              sublabel="Yonkers residents pay a city surcharge."
+              value={ny?.yonkers_address ?? false}
+              onChange={(v) => updateNY({ yonkers_address: v })}
+            />
+            <FormField label="Days spent in New York this tax year">
+              <input
+                type="number"
+                className={inputCls}
+                min={0}
+                max={366}
+                value={ny?.days_in_ny ?? 0}
+                onChange={(e) => updateNY({ days_in_ny: parseInt(e.target.value) || 0 })}
+              />
+            </FormField>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="NY work days">
+                <input
+                  type="number"
+                  className={inputCls}
+                  min={0}
+                  max={366}
+                  placeholder="180"
+                  value={ny?.ny_work_days ?? 0}
+                  onChange={(e) => updateNY({ ny_work_days: parseInt(e.target.value) || 0 })}
+                />
+              </FormField>
+              <FormField label="Total work days">
+                <input
+                  type="number"
+                  className={inputCls}
+                  min={0}
+                  max={366}
+                  placeholder="200"
+                  value={ny?.total_work_days ?? 0}
+                  onChange={(e) => updateNY({ total_work_days: parseInt(e.target.value) || 0 })}
+                />
+              </FormField>
+            </div>
+          </section>
+        )}
 
-        <div className="pt-4">
-          <button
-            onClick={handleNext}
-            className="w-full h-16 bg-blue-600 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 hover:bg-blue-500 active:scale-95 transition-all shadow-xl shadow-blue-200"
-          >
-            Submit for Calculation
-            <Sparkle className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+        {/* ── FICA / Social Security ── */}
+        <section className="space-y-3">
+          <SectionHeader
+            icon={Shield}
+            title="Social Security & Medicare (FICA)"
+            subtitle="F-1/J-1 students are exempt — get wrongly-withheld tax back"
+          />
+          <Toggle
+            label="Were SS / Medicare taxes withheld?"
+            sublabel="If yes, we'll include Form 843 to claim a full refund."
+            value={fica.employer_attempted_refund}
+            onChange={(v) => updateFICA({ employer_attempted_refund: v })}
+          />
+          {fica.employer_attempted_refund && (
+            <div className="pl-4 border-l-2 border-blue-200 space-y-3">
+              <Toggle
+                label="Did you ask your employer for a refund?"
+                sublabel="IRS requires you try the employer first. If they refused, we'll note that."
+                value={fica.has_form_8316}
+                onChange={(v) => updateFICA({ has_form_8316: v })}
+              />
+              <FormField label="Employer Name">
+                <input
+                  className={inputCls}
+                  value={fica.employer_name}
+                  onChange={(e) => updateFICA({ employer_name: e.target.value })}
+                  placeholder="New York University"
+                />
+              </FormField>
+              <FormField label="Employer EIN" hint="Found on your W-2 Box b (e.g. 13-5562308)">
+                <input
+                  className={inputCls}
+                  value={fica.employer_ein}
+                  onChange={(e) => updateFICA({ employer_ein: e.target.value })}
+                  placeholder="12-3456789"
+                />
+              </FormField>
+            </div>
+          )}
+        </section>
+
+        {/* ── Banking ── */}
+        <section className="space-y-3">
+          <SectionHeader
+            icon={CreditCard}
+            title="Refund Delivery"
+            subtitle="Direct deposit gets your refund 2–3 weeks faster"
+          />
+          <Toggle
+            label="Use direct deposit?"
+            sublabel="We'll include your bank details on Form 1040-NR."
+            value={banking.direct_deposit}
+            onChange={(v) => updateBanking({ direct_deposit: v })}
+          />
+          {banking.direct_deposit && (
+            <div className="space-y-3">
+              <FormField label="Routing Number" hint="9-digit number at the bottom left of a cheque">
+                <input
+                  className={inputCls}
+                  value={banking.routing_number}
+                  onChange={(e) =>
+                    updateBanking({ routing_number: e.target.value.replace(/\D/g, '').slice(0, 9) })
+                  }
+                  maxLength={9}
+                  inputMode="numeric"
+                  placeholder="021000021"
+                />
+              </FormField>
+              <FormField label="Account Number">
+                <input
+                  className={inputCls}
+                  value={banking.account_number}
+                  onChange={(e) => updateBanking({ account_number: e.target.value })}
+                  placeholder="000123456789"
+                />
+              </FormField>
+              <FormField label="Account Type">
+                <select
+                  className={selectCls}
+                  value={banking.account_type}
+                  onChange={(e) =>
+                    updateBanking({
+                      account_type: e.target.value as 'checking' | 'savings' | '',
+                    })
+                  }
+                >
+                  <option value="">Select…</option>
+                  <option value="checking">Checking</option>
+                  <option value="savings">Savings</option>
+                </select>
+              </FormField>
+            </div>
+          )}
+        </section>
+
+        <button
+          type="submit"
+          className="w-full h-14 bg-blue-600 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 hover:bg-blue-500 active:scale-95 transition-all shadow-xl shadow-blue-200"
+        >
+          Calculate My Return
+          <ChevronRight className="w-6 h-6" />
+        </button>
+      </form>
     </div>
   );
 }

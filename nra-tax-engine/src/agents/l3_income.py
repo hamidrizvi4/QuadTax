@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from src.agents._llm_safety import safe_parse
 from src.functions.code_mapper import IncomeCodeMapper
 from src.functions.withholding_reconciler import (
     Form1042SEntry,
@@ -69,25 +70,27 @@ class Form1099Data(BaseModel):
 class IncomeAgent:
     """LLM-powered agent for income classification."""
 
-    def __init__(self, llm_client: Any = None):
+    def __init__(self, llm_client: Any = None, secondary_llm_client: Any = None):
         if llm_client is None:
             from openai import OpenAI
 
             self.llm_client = OpenAI()
         else:
             self.llm_client = llm_client
+        self.secondary_llm_client = secondary_llm_client
 
     def _parse(self, schema, system_prompt: str, user_text: str):
-        completion = self.llm_client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+        return safe_parse(
+            primary_client=self.llm_client,
+            primary_model="gpt-4o-2024-08-06",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_text},
             ],
             response_format=schema,
-            temperature=0.0,
+            secondary_client=self.secondary_llm_client,
+            secondary_model="gpt-4o-mini" if self.secondary_llm_client else None,
         )
-        return completion.choices[0].message.parsed
 
     def process_income(
         self,

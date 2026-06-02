@@ -61,17 +61,25 @@ REQUIRED_LAYERS_FOR_ASSEMBLY: List[str] = ["L1", "L3", "L4", "L6", "L7", "L8", "
 class TaxEngine:
     """Drives the layered DAG from intake OCR text to a generated PDF package."""
 
-    def __init__(self, llm_client: Any = None, force_assembly: bool = False) -> None:
+    def __init__(
+        self,
+        llm_client: Any = None,
+        secondary_llm_client: Any = None,
+        force_assembly: bool = False,
+    ) -> None:
         """Initialize the orchestrator.
 
         Args:
             llm_client: OpenAI-compatible client. Pass an explicit instance in
                 tests to avoid the default lazy ``OpenAI()`` construction.
+            secondary_llm_client: Optional second client for dual-extract
+                cross-checking. Forwarded to each LLM agent.
             force_assembly: When True the engine bypasses the human-review
                 gate. The API surfaces this as an explicit acknowledgement of
                 every reason in ``state.requires_human_review``.
         """
         self.llm_client = llm_client
+        self.secondary_llm_client = secondary_llm_client
         self.force_assembly = force_assembly
 
     def check_dependencies(self, layer: str, state: ReturnStateObject) -> bool:
@@ -234,7 +242,7 @@ class TaxEngine:
         is_qualified_expense = mcq_answers["is_qualified_expense"]
 
         # L1 — Residency
-        residency_agent = ResidencyAgent(llm_client=self.llm_client)
+        residency_agent = ResidencyAgent(llm_client=self.llm_client, secondary_llm_client=self.secondary_llm_client)
         state = self._run_layer(
             layer_id="L1",
             function_name="ResidencyAgent.process_residency",
@@ -251,7 +259,7 @@ class TaxEngine:
 
         # L3 — Income
         self.check_dependencies("L3", state)
-        income_agent = IncomeAgent(llm_client=self.llm_client)
+        income_agent = IncomeAgent(llm_client=self.llm_client, secondary_llm_client=self.secondary_llm_client)
         state = self._run_layer(
             layer_id="L3",
             function_name="IncomeAgent.process_income",
@@ -268,7 +276,7 @@ class TaxEngine:
 
         # L4 — Treaty
         self.check_dependencies("L4", state)
-        treaty_agent = TreatyAgent(llm_client=self.llm_client)
+        treaty_agent = TreatyAgent(llm_client=self.llm_client, secondary_llm_client=self.secondary_llm_client)
         state = self._run_layer(
             layer_id="L4",
             function_name="TreatyAgent.process_treaties",
