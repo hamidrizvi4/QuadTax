@@ -675,6 +675,12 @@
             "title": "Output Dir",
             "description": "Directory to write packets into.",
             "default": "outputs"
+          },
+          "force_assembly": {
+            "type": "boolean",
+            "title": "Force Assembly",
+            "description": "When True the engine bypasses the human-review gate. The caller is acknowledging every reason previously surfaced in ``requires_human_review``. Default False \u2014 first request returns the review list without producing forms.",
+            "default": false
           }
         },
         "type": "object",
@@ -766,6 +772,14 @@
               }
             ],
             "title": "Fica Packet Path"
+          },
+          "requires_human_review": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Requires Human Review",
+            "description": "Reasons a CPA must review the return before filing. Non-empty when a validator or LLM confidence check flagged something. Pass force_assembly=True on a subsequent call to override after review."
           }
         },
         "type": "object",

@@ -1,10 +1,10 @@
 import axios, { AxiosError } from 'axios';
 
-import type {
-  IntakePayload,
-  SubmitRequest,
-  TaxProcessResponse,
-} from '@/lib/api-types';
+import type { components } from '@/lib/api-types';
+
+type IntakePayload = components['schemas']['IntakePayload'];
+type SubmitRequest = components['schemas']['SubmitRequest'];
+type TaxProcessResponse = components['schemas']['TaxProcessResponse'];
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/api/v1';
@@ -23,6 +23,8 @@ export async function submitReturn(args: SubmitArgs): Promise<TaxProcessResponse
     i94_ocr_text: args.i94OcrText ?? '',
     w2_ocr_texts: args.w2OcrTexts ?? [],
     form_1042s_ocr_texts: args.form1042sOcrTexts ?? [],
+    output_dir: 'outputs',
+    force_assembly: false,
   };
   try {
     const r = await axios.post<TaxProcessResponse>(`${API_BASE_URL}/submit`, body);
@@ -136,6 +138,6 @@ export async function submitTaxReturn(
       response.federal_refund_or_owed > 0 ? response.federal_refund_or_owed : 0,
     refund_or_owed: response.federal_refund_or_owed,
     requires_843_fica_claim: ficaFlag,
-    generated_forms: response.generated_form_outputs,
+    generated_forms: response.generated_form_outputs ?? [],
   };
 }

@@ -1,15 +1,15 @@
 import { create } from 'zustand';
 
-import type {
-  IntakeBanking,
-  IntakeElections,
-  IntakeFICA,
-  IntakeIdentity,
-  IntakeIncome,
-  IntakeNYContext,
-  IntakePayload,
-  IntakeResidency,
-} from '@/lib/api-types';
+import type { components } from '@/lib/api-types';
+
+type IntakeBanking = components['schemas']['IntakeBanking'];
+type IntakeElections = components['schemas']['IntakeElections'];
+type IntakeFICA = components['schemas']['IntakeFICA'];
+type IntakeIdentity = components['schemas']['IntakeIdentity'];
+type IntakeIncome = components['schemas']['IntakeIncome'];
+type IntakeNYContext = components['schemas']['IntakeNYContext'];
+type IntakePayload = components['schemas']['IntakePayload'];
+type IntakeResidency = components['schemas']['IntakeResidency'];
 
 /** Legacy results shape preserved so Phase-2 pages compile against Phase-6 API. */
 export interface ResultsView {
