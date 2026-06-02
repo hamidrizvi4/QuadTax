@@ -19,7 +19,7 @@ export default function LandingPage() {
         </p>
 
         <Link 
-          href="/intake/profile"
+          href="/intake/eligibility"
           className="group flex items-center gap-3 bg-slate-900 hover:bg-slate-800 text-white px-8 py-4 rounded-full text-lg font-semibold transition-all shadow-lg active:scale-95"
         >
           Start My Tax Return

@@ -32,7 +32,13 @@ export default function ProcessingPage() {
     async function run() {
       try {
         const intake = store.buildIntakePayload();
-        const data = await submitReturn({ intake });
+        const ocrTexts = store.buildOcrTexts();
+        const data = await submitReturn({
+          intake,
+          i94OcrText: ocrTexts.i94OcrText,
+          w2OcrTexts: ocrTexts.w2OcrTexts,
+          form1042sOcrTexts: ocrTexts.form1042sOcrTexts,
+        });
 
         clearInterval(interval);
         setCurrentStep(PIPELINE_STEPS.length - 1);

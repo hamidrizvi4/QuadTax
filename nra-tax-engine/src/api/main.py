@@ -13,15 +13,18 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import List, Optional
 
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from src.assembly.mailing_packager import MailingPackager
+from src.api.ocr_endpoint import router as ocr_router
 from src.intake.intake_schema import IntakePayload
 from src.intake.mcq_router import MCQRouter
 from src.intake.ocr_parser import DocumentParser
@@ -89,6 +92,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(ocr_router)
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +250,19 @@ async def upload_and_process_endpoint(
         generated_form_outputs=list(_generated),
         narrative_sections={},
     )
+
+
+@app.get("/api/v1/packet", tags=["tax"])
+def download_packet(path: str) -> FileResponse:
+    """Serve a generated packet file. Only allows files under outputs/ directory."""
+    abs_path = os.path.realpath(path)
+    outputs_abs = os.path.realpath("outputs")
+    if not abs_path.startswith(outputs_abs):
+        raise HTTPException(status_code=403, detail="Access denied.")
+    if not os.path.exists(abs_path):
+        raise HTTPException(status_code=404, detail="Packet not found.")
+    return FileResponse(abs_path, media_type="application/pdf",
+                        filename=os.path.basename(abs_path))
 
 
 if __name__ == "__main__":

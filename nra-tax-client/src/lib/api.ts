@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 
 import type { components } from '@/lib/api-types';
+import type { OcrResult } from '@/store/taxStore';
 
 type IntakePayload = components['schemas']['IntakePayload'];
 type SubmitRequest = components['schemas']['SubmitRequest'];
@@ -72,6 +73,34 @@ export async function submitReturnMultipart(
     throw new Error(
       ax.response?.data?.detail ?? ax.message ?? 'Failed to submit the return.',
     );
+  }
+}
+
+export interface ExtractDocumentsArgs {
+  taxYear: number;
+  i94File?: File | null;
+  w2Files?: File[];
+  form1042sFiles?: File[];
+  form1099Files?: File[];
+}
+
+/** Call POST /api/v1/ocr — upload documents, get structured extracted fields back. */
+export async function extractDocuments(args: ExtractDocumentsArgs): Promise<OcrResult> {
+  const form = new FormData();
+  form.append('tax_year', String(args.taxYear));
+  if (args.i94File) form.append('i94_file', args.i94File);
+  (args.w2Files ?? []).forEach((f) => form.append('w2_files', f));
+  (args.form1042sFiles ?? []).forEach((f) => form.append('form_1042s_files', f));
+  (args.form1099Files ?? []).forEach((f) => form.append('form_1099_files', f));
+
+  try {
+    const r = await axios.post<OcrResult>(`${API_BASE_URL}/ocr`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return r.data;
+  } catch (err) {
+    const ax = err as AxiosError<{ detail?: string }>;
+    throw new Error(ax.response?.data?.detail ?? ax.message ?? 'OCR extraction failed.');
   }
 }
 

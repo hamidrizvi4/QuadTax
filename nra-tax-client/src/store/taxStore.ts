@@ -12,12 +12,109 @@ type IntakeNYContext = components['schemas']['IntakeNYContext'];
 type IntakePayload = components['schemas']['IntakePayload'];
 type IntakeResidency = components['schemas']['IntakeResidency'];
 
+// ── New intake state types ─────────────────────────────────────────────────
+
+export interface EligibilityAnswers {
+  isUsCitizen: boolean | null;
+  isGreenCardHolder: boolean | null;
+  hasAppliedForResidence: boolean | null;
+}
+
+export interface TravelEntry {
+  visaType: string;
+  entryDate: string;
+  leaveDate: string;
+}
+
+export interface VisaDetails {
+  visaType: string;
+  visaIssueDate: string;
+  visaExpiryDate: string;
+  programStartDate: string;
+  programEndDate: string;
+  firstUsEntryDate: string;
+  intendedDepartureDate: string;
+  countryOfCitizenship: string;
+  countryOfResidenceBeforeUs: string;
+  changedVisaDuring2025: boolean | null;
+  isStillInUs: boolean | null;
+  travelHistory: TravelEntry[];
+}
+
+export interface W2Extracted {
+  box_1_wages: number;
+  box_2_fed_withholding: number;
+  box_3_ss_wages: number;
+  box_4_ss_withheld: number;
+  box_5_medicare_wages: number;
+  box_6_medicare_withheld: number;
+  box_17_state_income_tax: number;
+  box_18_local_wages: number;
+  box_19_local_income_tax: number;
+  box_20_locality_name: string;
+  employer_name: string;
+  employer_ein: string;
+  employee_name: string;
+  employee_ssn_or_itin: string;
+  tax_year: number;
+}
+
+export interface Form1042SExtracted {
+  income_code: number;
+  gross_income: number;
+  exemption_rate: number;
+  exemption_code: string;
+  fed_withheld: number;
+  chapter_indicator: number;
+  recipient_name: string;
+  withholding_agent_name: string;
+}
+
+export interface Form1099Extracted {
+  form_kind: string;
+  gross_amount: number;
+  fed_withholding: number;
+  payer_name: string;
+}
+
+export interface I94Extracted {
+  days_current_year: number;
+  days_minus_1: number;
+  days_minus_2: number;
+  latest_entry_date: string;
+  latest_class_of_admission: string;
+}
+
+export interface OcrResult {
+  i94: I94Extracted | null;
+  w2s: W2Extracted[];
+  form_1042s: Form1042SExtracted[];
+  form_1099s: Form1099Extracted[];
+}
+
+export interface ExtrasAnswers {
+  isFullTimeStudent: boolean | null;
+  isDegreeCandidate: boolean | null;
+  isOptCpt: boolean | null;
+  hadDigitalAssets: boolean | null;
+  canBeClaimedAsDependent: boolean | null;
+  wasMarriedOnLastDay: boolean | null;
+  madeEstimatedFederalPayments: boolean | null;
+  estimatedFederalPaymentAmount: number;
+  madeEstimatedStatePayments: boolean | null;
+  filedFederalExtension: boolean | null;
+  filedPreviousFederalReturn: boolean | null;
+  previousReturnYear: number | null;
+  previousReturnType: string;
+}
+
+// ── Results ────────────────────────────────────────────────────────────────
+
 export interface ResultsView {
   taxLiability: number | null;
   refundOrOwed: number | null;
   requiresFicaClaim: boolean | null;
   generatedForms: string[];
-  // Extended fields from TaxProcessResponse
   nyRefundOrOwed: number;
   ficaRefundAmount: number;
   requiresHumanReview: string[];
@@ -28,7 +125,7 @@ export interface ResultsView {
   narrativeSections: Record<string, string>;
 }
 
-// Default seeds — kept in sync with nra-tax-engine/src/intake/intake_schema.py.
+// ── Initial values ─────────────────────────────────────────────────────────
 
 const initialIdentity: IntakeIdentity = {
   first_name: '',
@@ -116,6 +213,43 @@ const initialElections: IntakeElections = {
   closer_connection_exception_claimed: false,
 };
 
+const initialEligibility: EligibilityAnswers = {
+  isUsCitizen: null,
+  isGreenCardHolder: null,
+  hasAppliedForResidence: null,
+};
+
+const initialVisaDetails: VisaDetails = {
+  visaType: 'F-1',
+  visaIssueDate: '',
+  visaExpiryDate: '',
+  programStartDate: '',
+  programEndDate: '',
+  firstUsEntryDate: '',
+  intendedDepartureDate: '',
+  countryOfCitizenship: '',
+  countryOfResidenceBeforeUs: '',
+  changedVisaDuring2025: null,
+  isStillInUs: null,
+  travelHistory: [],
+};
+
+const initialExtras: ExtrasAnswers = {
+  isFullTimeStudent: null,
+  isDegreeCandidate: null,
+  isOptCpt: null,
+  hadDigitalAssets: null,
+  canBeClaimedAsDependent: null,
+  wasMarriedOnLastDay: null,
+  madeEstimatedFederalPayments: null,
+  estimatedFederalPaymentAmount: 0,
+  madeEstimatedStatePayments: null,
+  filedFederalExtension: null,
+  filedPreviousFederalReturn: null,
+  previousReturnYear: null,
+  previousReturnType: '',
+};
+
 const initialResults: ResultsView = {
   taxLiability: null,
   refundOrOwed: null,
@@ -131,7 +265,8 @@ const initialResults: ResultsView = {
   narrativeSections: {},
 };
 
-// Legacy MCQ shape kept for backwards-compat with Phase-2 intake pages.
+// ── Legacy MCQ back-compat ─────────────────────────────────────────────────
+
 export interface LegacyMcqAnswers {
   tax_year: number;
   visa_type: string;
@@ -142,6 +277,8 @@ export interface LegacyMcqAnswers {
   is_qualified_expense: boolean;
 }
 
+// ── TaxState interface ─────────────────────────────────────────────────────
+
 export interface TaxState {
   identity: IntakeIdentity;
   residency: IntakeResidency;
@@ -151,7 +288,12 @@ export interface TaxState {
   banking: IntakeBanking;
   elections: IntakeElections;
 
-  // File refs — not persisted (can't serialize File objects)
+  eligibility: EligibilityAnswers;
+  visaDetails: VisaDetails;
+  extras: ExtrasAnswers;
+  ocrResult: OcrResult | null;
+
+  // File refs — not persisted
   i94File: File | null;
   w2Files: File[];
   form1042sFiles: File[];
@@ -165,6 +307,10 @@ export interface TaxState {
   updateFICA: (updates: Partial<IntakeFICA>) => void;
   updateBanking: (updates: Partial<IntakeBanking>) => void;
   updateElections: (updates: Partial<IntakeElections>) => void;
+  updateEligibility: (updates: Partial<EligibilityAnswers>) => void;
+  updateVisaDetails: (updates: Partial<VisaDetails>) => void;
+  updateExtras: (updates: Partial<ExtrasAnswers>) => void;
+  setOcrResult: (result: OcrResult) => void;
 
   setI94File: (file: File | null) => void;
   addW2File: (file: File) => void;
@@ -176,6 +322,7 @@ export interface TaxState {
   reset: () => void;
 
   buildIntakePayload: () => IntakePayload;
+  buildOcrTexts: () => { i94OcrText: string; w2OcrTexts: string[]; form1042sOcrTexts: string[] };
 
   /** @deprecated Use identity/residency/income directly. */
   readonly mcqAnswers: LegacyMcqAnswers;
@@ -184,6 +331,8 @@ export interface TaxState {
   /** @deprecated Renamed to reset(). */
   resetFastStore: () => void;
 }
+
+// ── Store ──────────────────────────────────────────────────────────────────
 
 export const useTaxStore = create<TaxState>()(
   persist(
@@ -195,6 +344,10 @@ export const useTaxStore = create<TaxState>()(
       fica: { ...initialFICA },
       banking: { ...initialBanking },
       elections: { ...initialElections },
+      eligibility: { ...initialEligibility },
+      visaDetails: { ...initialVisaDetails },
+      extras: { ...initialExtras },
+      ocrResult: null,
 
       i94File: null,
       w2Files: [],
@@ -220,6 +373,13 @@ export const useTaxStore = create<TaxState>()(
         set((state) => ({ banking: { ...state.banking, ...updates } })),
       updateElections: (updates) =>
         set((state) => ({ elections: { ...state.elections, ...updates } })),
+      updateEligibility: (updates) =>
+        set((state) => ({ eligibility: { ...state.eligibility, ...updates } })),
+      updateVisaDetails: (updates) =>
+        set((state) => ({ visaDetails: { ...state.visaDetails, ...updates } })),
+      updateExtras: (updates) =>
+        set((state) => ({ extras: { ...state.extras, ...updates } })),
+      setOcrResult: (result) => set({ ocrResult: result }),
 
       setI94File: (file) => set({ i94File: file }),
       addW2File: (file) =>
@@ -242,6 +402,10 @@ export const useTaxStore = create<TaxState>()(
           fica: { ...initialFICA },
           banking: { ...initialBanking },
           elections: { ...initialElections },
+          eligibility: { ...initialEligibility },
+          visaDetails: { ...initialVisaDetails },
+          extras: { ...initialExtras },
+          ocrResult: null,
           i94File: null,
           w2Files: [],
           form1042sFiles: [],
@@ -259,6 +423,54 @@ export const useTaxStore = create<TaxState>()(
           banking: s.banking,
           elections: s.elections,
         };
+      },
+
+      buildOcrTexts: () => {
+        const s = get();
+        const ocr = s.ocrResult;
+        if (!ocr) return { i94OcrText: '', w2OcrTexts: [], form1042sOcrTexts: [] };
+
+        const i94OcrText = ocr.i94
+          ? [
+              `I-94 Data:`,
+              `days_current_year=${ocr.i94.days_current_year}`,
+              `days_minus_1=${ocr.i94.days_minus_1}`,
+              `days_minus_2=${ocr.i94.days_minus_2}`,
+              `latest_entry=${ocr.i94.latest_entry_date}`,
+              `class_of_admission=${ocr.i94.latest_class_of_admission}`,
+            ].join(' ')
+          : '';
+
+        const w2OcrTexts = ocr.w2s.map(
+          (w) =>
+            `W-2 Extracted: ` +
+            `Box 1 Wages: ${w.box_1_wages}, ` +
+            `Box 2 Federal: ${w.box_2_fed_withholding}, ` +
+            `Box 3 SS Wages: ${w.box_3_ss_wages}, ` +
+            `Box 4 SS Withheld: ${w.box_4_ss_withheld}, ` +
+            `Box 5 Medicare Wages: ${w.box_5_medicare_wages}, ` +
+            `Box 6 Medicare: ${w.box_6_medicare_withheld}, ` +
+            `Box 17 State: ${w.box_17_state_income_tax}, ` +
+            `Box 18 Local Wages: ${w.box_18_local_wages}, ` +
+            `Box 19 Local Tax: ${w.box_19_local_income_tax}, ` +
+            `Box 20 Locality: ${w.box_20_locality_name}, ` +
+            `Employer: ${w.employer_name}, EIN: ${w.employer_ein}`,
+        );
+
+        const form1042sOcrTexts = ocr.form_1042s.map(
+          (f) =>
+            `1042-S Extracted: ` +
+            `Income Code: ${f.income_code}, ` +
+            `Gross Income: ${f.gross_income}, ` +
+            `Exemption Rate: ${f.exemption_rate}, ` +
+            `Exemption Code: ${f.exemption_code}, ` +
+            `Fed Withheld: ${f.fed_withheld}, ` +
+            `Chapter: ${f.chapter_indicator}, ` +
+            `Recipient: ${f.recipient_name}, ` +
+            `Agent: ${f.withholding_agent_name}`,
+        );
+
+        return { i94OcrText, w2OcrTexts, form1042sOcrTexts };
       },
 
       // --- Legacy back-compat ---
@@ -297,7 +509,6 @@ export const useTaxStore = create<TaxState>()(
     }),
     {
       name: 'quadtax-intake',
-      // File objects can't be serialized — exclude them from persistence
       partialize: (state) => ({
         identity: state.identity,
         residency: state.residency,
@@ -306,8 +517,12 @@ export const useTaxStore = create<TaxState>()(
         fica: state.fica,
         banking: state.banking,
         elections: state.elections,
+        eligibility: state.eligibility,
+        visaDetails: state.visaDetails,
+        extras: state.extras,
+        ocrResult: state.ocrResult,
         results: state.results,
       }),
-    }
-  )
+    },
+  ),
 );
