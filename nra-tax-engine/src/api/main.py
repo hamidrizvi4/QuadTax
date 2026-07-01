@@ -254,10 +254,22 @@ async def upload_and_process_endpoint(
 
 @app.get("/api/v1/packet", tags=["tax"])
 def download_packet(path: str) -> FileResponse:
-    """Serve a generated packet file. Only allows files under outputs/ directory."""
+    """Serve a generated packet file. Only allows files under outputs/ directory.
+
+    Uses ``os.path.commonpath`` rather than ``str.startswith`` — a naive
+    string-prefix check would wrongly admit a sibling directory such as
+    ``outputs_evil/`` because the *string* ``"outputs_evil"`` starts with
+    ``"outputs"``, even though it is not a descendant of the outputs
+    directory on the filesystem.
+    """
     abs_path = os.path.realpath(path)
     outputs_abs = os.path.realpath("outputs")
-    if not abs_path.startswith(outputs_abs):
+    try:
+        is_contained = os.path.commonpath([abs_path, outputs_abs]) == outputs_abs
+    except ValueError:
+        # Raised on Windows when the paths are on different drives — never contained.
+        is_contained = False
+    if not is_contained:
         raise HTTPException(status_code=403, detail="Access denied.")
     if not os.path.exists(abs_path):
         raise HTTPException(status_code=404, detail="Packet not found.")
