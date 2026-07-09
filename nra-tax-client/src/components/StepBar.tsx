@@ -20,8 +20,8 @@ export function StepBar() {
   if (currentIdx < 0) return null;
 
   return (
-    <div className="w-full bg-white border-b border-slate-100 px-3 py-2 sticky top-0 z-50">
-      <div className="max-w-md mx-auto flex items-center">
+    <div className="w-full bg-white border-b border-slate-100 px-3 py-2 md:py-3 sticky top-0 z-50">
+      <div className="max-w-md md:max-w-2xl mx-auto flex items-center">
         {STEPS.map((step, i) => {
           const isDone = i < currentIdx;
           const isActive = i === currentIdx;
@@ -29,7 +29,7 @@ export function StepBar() {
             <div key={i} className="flex items-center flex-1 min-w-0">
               <div className="flex flex-col items-center gap-0.5 shrink-0">
                 <div
-                  className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold transition-all ${
+                  className={`flex items-center justify-center w-6 h-6 md:w-7 md:h-7 rounded-full text-[10px] md:text-xs font-bold transition-all ${
                     isDone
                       ? 'bg-blue-600 text-white'
                       : isActive
@@ -40,7 +40,7 @@ export function StepBar() {
                   {isDone ? <Check className="w-3 h-3" /> : i + 1}
                 </div>
                 <span
-                  className={`text-[9px] font-medium whitespace-nowrap ${
+                  className={`text-[9px] md:text-[11px] font-medium whitespace-nowrap ${
                     isActive ? 'text-slate-900' : isDone ? 'text-blue-600' : 'text-slate-300'
                   }`}
                 >
