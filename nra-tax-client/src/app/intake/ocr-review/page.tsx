@@ -25,6 +25,13 @@ export default function OcrReviewPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // No OCR data (deep link / refresh) → send the user back to the upload step.
+  // Must run in an effect: calling router.push during render breaks React
+  // rules and crashes static prerendering ("location is not defined").
+  useEffect(() => {
+    if (!ocrResult) router.replace('/intake/documents');
+  }, [ocrResult, router]);
+
   const hasDocuments = w2s.length > 0 || form1042s.length > 0 || i94 !== null;
 
   const allConfirmed =
@@ -62,7 +69,7 @@ export default function OcrReviewPage() {
   };
 
   if (!ocrResult) {
-    router.push('/intake/documents');
+    // Redirect is handled by the effect above; render nothing meanwhile.
     return null;
   }
 
