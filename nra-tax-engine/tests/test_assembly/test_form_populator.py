@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from pypdf import PdfReader
 
 from src.assembly.form_populator import FormPopulator
 from src.orchestrator.state import ReturnStateObject
@@ -176,3 +177,79 @@ class TestFormPopulatorVendoredTemplates:
         names = " ".join(os.path.basename(p) for p in pdfs)
         assert "1040-NR" in names
         assert "8843" in names
+
+
+class TestFormPopulator8833MultiRow:
+    """Form 8833 must be filed once per treaty position (IRS requires a
+    separate 8833 per item) — verify the per-row-cloning path actually
+    produces N distinct, correctly-filled PDFs, not just N=1."""
+
+    def test_two_benefits_produce_two_distinct_filled_pdfs(self):
+        repo_templates = (
+            Path(__file__).resolve().parents[2] / "assets" / "templates" / "2025"
+        )
+        if not (repo_templates / "f8833.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.first_name = "Wei"
+        state.identity.last_name = "Chen"
+        state.identity.itin = "912345678"
+        state.forms_required = ["8833"]
+        state.ready_for_assembly = True
+        state.treaty.applied_benefits = [
+            {
+                "country_name": "China (People's Republic of)",
+                "country_iso2": "CN",
+                "article_id": "20(c)",
+                "category": "student_personal_services",
+                "explanation": "US-China treaty Article 20(c) wage exemption.",
+                "exempt_amount": 5000.0,
+                "applies_after_saving_clause": True,
+                "requires_form_8833": True,
+            },
+            {
+                "country_name": "China (People's Republic of)",
+                "country_iso2": "CN",
+                "article_id": "20(b)",
+                "category": "scholarship_fellowship",
+                "explanation": "US-China treaty Article 20(b) scholarship exemption.",
+                "exempt_amount": 3000.0,
+                "applies_after_saving_clause": False,
+                "requires_form_8833": True,
+            },
+        ]
+
+        out = tempfile.mkdtemp()
+        populator = FormPopulator(
+            templates_dir=str(repo_templates.parent), outputs_dir=out, tax_year=2025,
+        )
+        generated = populator.generate_filing_package(state)
+
+        pdfs_8833 = sorted(p for p in generated if p.endswith(".pdf") and "8833" in p)
+        assert len(pdfs_8833) == 2, f"expected 2 separate 8833 PDFs, got {pdfs_8833}"
+        assert pdfs_8833[0] != pdfs_8833[1]
+
+        def _real_values(path: str) -> dict:
+            fields = PdfReader(path).get_fields() or {}
+            return {
+                k: v.get("/V")
+                for k, v in fields.items()
+                if v.get("/V") and str(v.get("/V")) not in ("/Off", "")
+            }
+
+        values_1 = _real_values(pdfs_8833[0])
+        values_2 = _real_values(pdfs_8833[1])
+
+        all_articles_seen = set()
+        for vals in (values_1, values_2):
+            all_articles_seen.update(v for v in vals.values() if v in ("20(c)", "20(b)"))
+        assert all_articles_seen == {"20(c)", "20(b)"}, (
+            "each row's own article must land in its own PDF, not be shared/"
+            f"cross-contaminated — saw {all_articles_seen}"
+        )
+
+        all_amounts_seen = set()
+        for vals in (values_1, values_2):
+            all_amounts_seen.update(v for v in vals.values() if v in ("5000.0", "3000.0"))
+        assert all_amounts_seen == {"5000.0", "3000.0"}
