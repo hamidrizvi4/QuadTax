@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/ocr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract Documents
+         * @description Extract structured fields from uploaded tax documents using OCR + LLM.
+         */
+        post: operations["extract_documents_api_v1_ocr_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/healthz": {
         parameters: {
             query?: never;
@@ -41,24 +61,20 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/upload-and-process": {
+    "/api/v1/packet": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Upload And Process Endpoint
-         * @deprecated
-         * @description Legacy multipart endpoint preserved for the Phase-2 client.
-         *
-         *     New clients should use ``POST /api/v1/submit`` with the typed
-         *     :class:`SubmitRequest` body.
+         * Download Packet
+         * @description Serve a generated packet file. Only allows files under outputs/ directory.
          */
-        post: operations["upload_and_process_endpoint_api_v1_upload_and_process_post"];
+        get: operations["download_packet_api_v1_packet_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -69,10 +85,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** Body_upload_and_process_endpoint_api_v1_upload_and_process_post */
-        Body_upload_and_process_endpoint_api_v1_upload_and_process_post: {
+        /** Body_extract_documents_api_v1_ocr_post */
+        Body_extract_documents_api_v1_ocr_post: {
+            /**
+             * Tax Year
+             * @default 2025
+             */
+            tax_year: number;
             /** I94 File */
-            i94_file: string;
+            i94_file?: string | null;
             /**
              * W2 Files
              * @default []
@@ -83,13 +104,110 @@ export interface components {
              * @default []
              */
             form_1042s_files: string[];
-            /** Mcq Answers Json */
-            mcq_answers_json: string;
+            /**
+             * Form 1099 Files
+             * @default []
+             */
+            form_1099_files: string[];
+        };
+        /** Form1042SExtracted */
+        Form1042SExtracted: {
+            /**
+             * Income Code
+             * @default 0
+             */
+            income_code: number;
+            /**
+             * Gross Income
+             * @default 0
+             */
+            gross_income: number;
+            /**
+             * Exemption Rate
+             * @default 0
+             */
+            exemption_rate: number;
+            /**
+             * Exemption Code
+             * @default
+             */
+            exemption_code: string;
+            /**
+             * Fed Withheld
+             * @default 0
+             */
+            fed_withheld: number;
+            /**
+             * Chapter Indicator
+             * @default 3
+             */
+            chapter_indicator: number;
+            /**
+             * Recipient Name
+             * @default
+             */
+            recipient_name: string;
+            /**
+             * Withholding Agent Name
+             * @default
+             */
+            withholding_agent_name: string;
+        };
+        /** Form1099Extracted */
+        Form1099Extracted: {
+            /**
+             * Form Kind
+             * @default
+             */
+            form_kind: string;
+            /**
+             * Gross Amount
+             * @default 0
+             */
+            gross_amount: number;
+            /**
+             * Fed Withholding
+             * @default 0
+             */
+            fed_withholding: number;
+            /**
+             * Payer Name
+             * @default
+             */
+            payer_name: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** I94Extracted */
+        I94Extracted: {
+            /**
+             * Days Current Year
+             * @default 0
+             */
+            days_current_year: number;
+            /**
+             * Days Minus 1
+             * @default 0
+             */
+            days_minus_1: number;
+            /**
+             * Days Minus 2
+             * @default 0
+             */
+            days_minus_2: number;
+            /**
+             * Latest Entry Date
+             * @default
+             */
+            latest_entry_date: string;
+            /**
+             * Latest Class Of Admission
+             * @default
+             */
+            latest_class_of_admission: string;
         };
         /**
          * IntakeBanking
@@ -440,7 +558,7 @@ export interface components {
         };
         /**
          * IntakePayload
-         * @description Top-level intake payload — POSTed to /api/v1/upload-and-process.
+         * @description Top-level intake payload — POSTed to /api/v1/submit.
          */
         IntakePayload: {
             identity: components["schemas"]["IntakeIdentity"];
@@ -489,6 +607,16 @@ export interface components {
              * @enum {string}
              */
             prior_year_residency_status: "nonresident_alien" | "resident_alien" | "none";
+        };
+        /** OcrResult */
+        OcrResult: {
+            i94?: components["schemas"]["I94Extracted"] | null;
+            /** W2S */
+            w2s?: components["schemas"]["W2Extracted"][];
+            /** Form 1042S */
+            form_1042s?: components["schemas"]["Form1042SExtracted"][];
+            /** Form 1099S */
+            form_1099s?: components["schemas"]["Form1099Extracted"][];
         };
         /**
          * SubmitRequest
@@ -567,6 +695,13 @@ export interface components {
              * @description Reasons a CPA must review the return before filing. Non-empty when a validator or LLM confidence check flagged something. Pass force_assembly=True on a subsequent call to override after review.
              */
             requires_human_review?: string[];
+            /**
+             * Narrative Sections
+             * @description Plain-English narrative sections keyed by section title. Each value is a human-readable explanation of that portion of the return. Empty dict when narrative generation is not available.
+             */
+            narrative_sections?: {
+                [key: string]: unknown;
+            };
         };
         /** ValidationError */
         ValidationError: {
@@ -581,6 +716,89 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** W2Extracted */
+        W2Extracted: {
+            /**
+             * Box 1 Wages
+             * @default 0
+             */
+            box_1_wages: number;
+            /**
+             * Box 2 Fed Withholding
+             * @default 0
+             */
+            box_2_fed_withholding: number;
+            /**
+             * Box 3 Ss Wages
+             * @default 0
+             */
+            box_3_ss_wages: number;
+            /**
+             * Box 4 Ss Withheld
+             * @default 0
+             */
+            box_4_ss_withheld: number;
+            /**
+             * Box 5 Medicare Wages
+             * @default 0
+             */
+            box_5_medicare_wages: number;
+            /**
+             * Box 6 Medicare Withheld
+             * @default 0
+             */
+            box_6_medicare_withheld: number;
+            /**
+             * Box 17 State Income Tax
+             * @default 0
+             */
+            box_17_state_income_tax: number;
+            /**
+             * Box 18 Local Wages
+             * @default 0
+             */
+            box_18_local_wages: number;
+            /**
+             * Box 19 Local Income Tax
+             * @default 0
+             */
+            box_19_local_income_tax: number;
+            /**
+             * Box 20 Locality Name
+             * @default
+             */
+            box_20_locality_name: string;
+            /**
+             * Employer Name
+             * @description Employer name from box c
+             * @default
+             */
+            employer_name: string;
+            /**
+             * Employer Ein
+             * @description Employer EIN from box b
+             * @default
+             */
+            employer_ein: string;
+            /**
+             * Employee Name
+             * @description Employee first+last from box e
+             * @default
+             */
+            employee_name: string;
+            /**
+             * Employee Ssn Or Itin
+             * @description SSN/ITIN from box a
+             * @default
+             */
+            employee_ssn_or_itin: string;
+            /**
+             * Tax Year
+             * @description Tax year on the W-2
+             * @default 0
+             */
+            tax_year: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -590,6 +808,39 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    extract_documents_api_v1_ocr_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_extract_documents_api_v1_ocr_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OcrResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     healthz_api_v1_healthz_get: {
         parameters: {
             query?: never;
@@ -645,18 +896,16 @@ export interface operations {
             };
         };
     };
-    upload_and_process_endpoint_api_v1_upload_and_process_post: {
+    download_packet_api_v1_packet_get: {
         parameters: {
-            query?: never;
+            query: {
+                path: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_upload_and_process_endpoint_api_v1_upload_and_process_post"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -664,7 +913,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaxProcessResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -178,7 +178,7 @@ class IntakeElections(BaseModel):
 
 
 class IntakePayload(BaseModel):
-    """Top-level intake payload — POSTed to /api/v1/upload-and-process."""
+    """Top-level intake payload — POSTed to /api/v1/submit."""
 
     model_config = ConfigDict(extra="forbid")
 

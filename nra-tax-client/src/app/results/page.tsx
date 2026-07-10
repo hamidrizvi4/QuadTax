@@ -176,7 +176,7 @@ export default function ResultsPage() {
         {results.federalPacketPath && (
           <button
             onClick={() => {
-              const url = `${process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/api/v1'}/packet?path=${encodeURIComponent(results.federalPacketPath!)}`;
+              const url = `/api/packet?path=${encodeURIComponent(results.federalPacketPath!)}`;
               window.open(url, '_blank');
             }}
             className="w-full h-14 bg-blue-600 text-white rounded-2xl font-bold text-base flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all"
@@ -189,7 +189,7 @@ export default function ResultsPage() {
         {results.nyPacketPath && (
           <button
             onClick={() => {
-              const url = `${process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/api/v1'}/packet?path=${encodeURIComponent(results.nyPacketPath!)}`;
+              const url = `/api/packet?path=${encodeURIComponent(results.nyPacketPath!)}`;
               window.open(url, '_blank');
             }}
             className="w-full h-12 bg-slate-700 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-3 active:scale-95 transition-all"

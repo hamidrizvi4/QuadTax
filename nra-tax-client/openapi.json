@@ -6,6 +6,47 @@
     "version": "0.4.0"
   },
   "paths": {
+    "/api/v1/ocr": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "Extract Documents",
+        "description": "Extract structured fields from uploaded tax documents using OCR + LLM.",
+        "operationId": "extract_documents_api_v1_ocr_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_documents_api_v1_ocr_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OcrResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/healthz": {
       "get": {
         "tags": [
@@ -71,32 +112,31 @@
         }
       }
     },
-    "/api/v1/upload-and-process": {
-      "post": {
+    "/api/v1/packet": {
+      "get": {
         "tags": [
           "tax"
         ],
-        "summary": "Upload And Process Endpoint",
-        "description": "Legacy multipart endpoint preserved for the Phase-2 client.\n\nNew clients should use ``POST /api/v1/submit`` with the typed\n:class:`SubmitRequest` body.",
-        "operationId": "upload_and_process_endpoint_api_v1_upload_and_process_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_upload_and_process_endpoint_api_v1_upload_and_process_post"
-              }
+        "summary": "Download Packet",
+        "description": "Serve a generated packet file. Only allows files under outputs/ directory.",
+        "operationId": "download_packet_api_v1_packet_get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
             }
-          },
-          "required": true
-        },
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaxProcessResponse"
-                }
+                "schema": {}
               }
             }
           },
@@ -110,18 +150,29 @@
               }
             }
           }
-        },
-        "deprecated": true
+        }
       }
     }
   },
   "components": {
     "schemas": {
-      "Body_upload_and_process_endpoint_api_v1_upload_and_process_post": {
+      "Body_extract_documents_api_v1_ocr_post": {
         "properties": {
+          "tax_year": {
+            "type": "integer",
+            "title": "Tax Year",
+            "default": 2025
+          },
           "i94_file": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
+            "anyOf": [
+              {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "I94 File"
           },
           "w2_files": {
@@ -142,17 +193,90 @@
             "title": "Form 1042S Files",
             "default": []
           },
-          "mcq_answers_json": {
-            "type": "string",
-            "title": "Mcq Answers Json"
+          "form_1099_files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Form 1099 Files",
+            "default": []
           }
         },
         "type": "object",
-        "required": [
-          "i94_file",
-          "mcq_answers_json"
-        ],
-        "title": "Body_upload_and_process_endpoint_api_v1_upload_and_process_post"
+        "title": "Body_extract_documents_api_v1_ocr_post"
+      },
+      "Form1042SExtracted": {
+        "properties": {
+          "income_code": {
+            "type": "integer",
+            "title": "Income Code",
+            "default": 0
+          },
+          "gross_income": {
+            "type": "number",
+            "title": "Gross Income",
+            "default": 0.0
+          },
+          "exemption_rate": {
+            "type": "number",
+            "title": "Exemption Rate",
+            "default": 0.0
+          },
+          "exemption_code": {
+            "type": "string",
+            "title": "Exemption Code",
+            "default": ""
+          },
+          "fed_withheld": {
+            "type": "number",
+            "title": "Fed Withheld",
+            "default": 0.0
+          },
+          "chapter_indicator": {
+            "type": "integer",
+            "title": "Chapter Indicator",
+            "default": 3
+          },
+          "recipient_name": {
+            "type": "string",
+            "title": "Recipient Name",
+            "default": ""
+          },
+          "withholding_agent_name": {
+            "type": "string",
+            "title": "Withholding Agent Name",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "Form1042SExtracted"
+      },
+      "Form1099Extracted": {
+        "properties": {
+          "form_kind": {
+            "type": "string",
+            "title": "Form Kind",
+            "default": ""
+          },
+          "gross_amount": {
+            "type": "number",
+            "title": "Gross Amount",
+            "default": 0.0
+          },
+          "fed_withholding": {
+            "type": "number",
+            "title": "Fed Withholding",
+            "default": 0.0
+          },
+          "payer_name": {
+            "type": "string",
+            "title": "Payer Name",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "Form1099Extracted"
       },
       "HTTPValidationError": {
         "properties": {
@@ -166,6 +290,37 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "I94Extracted": {
+        "properties": {
+          "days_current_year": {
+            "type": "integer",
+            "title": "Days Current Year",
+            "default": 0
+          },
+          "days_minus_1": {
+            "type": "integer",
+            "title": "Days Minus 1",
+            "default": 0
+          },
+          "days_minus_2": {
+            "type": "integer",
+            "title": "Days Minus 2",
+            "default": 0
+          },
+          "latest_entry_date": {
+            "type": "string",
+            "title": "Latest Entry Date",
+            "default": ""
+          },
+          "latest_class_of_admission": {
+            "type": "string",
+            "title": "Latest Class Of Admission",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "I94Extracted"
       },
       "IntakeBanking": {
         "properties": {
@@ -590,7 +745,7 @@
           "income"
         ],
         "title": "IntakePayload",
-        "description": "Top-level intake payload \u2014 POSTed to /api/v1/upload-and-process."
+        "description": "Top-level intake payload \u2014 POSTed to /api/v1/submit."
       },
       "IntakeResidency": {
         "properties": {
@@ -645,6 +800,43 @@
         "type": "object",
         "title": "IntakeResidency",
         "description": "Residency / visa context. The OCR'd I-94 supplies the day counts."
+      },
+      "OcrResult": {
+        "properties": {
+          "i94": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/I94Extracted"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "w2s": {
+            "items": {
+              "$ref": "#/components/schemas/W2Extracted"
+            },
+            "type": "array",
+            "title": "W2S"
+          },
+          "form_1042s": {
+            "items": {
+              "$ref": "#/components/schemas/Form1042SExtracted"
+            },
+            "type": "array",
+            "title": "Form 1042S"
+          },
+          "form_1099s": {
+            "items": {
+              "$ref": "#/components/schemas/Form1099Extracted"
+            },
+            "type": "array",
+            "title": "Form 1099S"
+          }
+        },
+        "type": "object",
+        "title": "OcrResult"
       },
       "SubmitRequest": {
         "properties": {
@@ -780,6 +972,12 @@
             "type": "array",
             "title": "Requires Human Review",
             "description": "Reasons a CPA must review the return before filing. Non-empty when a validator or LLM confidence check flagged something. Pass force_assembly=True on a subsequent call to override after review."
+          },
+          "narrative_sections": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Narrative Sections",
+            "description": "Plain-English narrative sections keyed by section title. Each value is a human-readable explanation of that portion of the return. Empty dict when narrative generation is not available."
           }
         },
         "type": "object",
@@ -830,6 +1028,92 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "W2Extracted": {
+        "properties": {
+          "box_1_wages": {
+            "type": "number",
+            "title": "Box 1 Wages",
+            "default": 0.0
+          },
+          "box_2_fed_withholding": {
+            "type": "number",
+            "title": "Box 2 Fed Withholding",
+            "default": 0.0
+          },
+          "box_3_ss_wages": {
+            "type": "number",
+            "title": "Box 3 Ss Wages",
+            "default": 0.0
+          },
+          "box_4_ss_withheld": {
+            "type": "number",
+            "title": "Box 4 Ss Withheld",
+            "default": 0.0
+          },
+          "box_5_medicare_wages": {
+            "type": "number",
+            "title": "Box 5 Medicare Wages",
+            "default": 0.0
+          },
+          "box_6_medicare_withheld": {
+            "type": "number",
+            "title": "Box 6 Medicare Withheld",
+            "default": 0.0
+          },
+          "box_17_state_income_tax": {
+            "type": "number",
+            "title": "Box 17 State Income Tax",
+            "default": 0.0
+          },
+          "box_18_local_wages": {
+            "type": "number",
+            "title": "Box 18 Local Wages",
+            "default": 0.0
+          },
+          "box_19_local_income_tax": {
+            "type": "number",
+            "title": "Box 19 Local Income Tax",
+            "default": 0.0
+          },
+          "box_20_locality_name": {
+            "type": "string",
+            "title": "Box 20 Locality Name",
+            "default": ""
+          },
+          "employer_name": {
+            "type": "string",
+            "title": "Employer Name",
+            "description": "Employer name from box c",
+            "default": ""
+          },
+          "employer_ein": {
+            "type": "string",
+            "title": "Employer Ein",
+            "description": "Employer EIN from box b",
+            "default": ""
+          },
+          "employee_name": {
+            "type": "string",
+            "title": "Employee Name",
+            "description": "Employee first+last from box e",
+            "default": ""
+          },
+          "employee_ssn_or_itin": {
+            "type": "string",
+            "title": "Employee Ssn Or Itin",
+            "description": "SSN/ITIN from box a",
+            "default": ""
+          },
+          "tax_year": {
+            "type": "integer",
+            "title": "Tax Year",
+            "description": "Tax year on the W-2",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "W2Extracted"
       }
     }
   }

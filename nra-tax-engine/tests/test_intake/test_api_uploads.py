@@ -1,6 +1,5 @@
-"""Tests for the FastAPI endpoints (Phase 6 typed payload + legacy multipart)."""
+"""Tests for the FastAPI endpoints (Phase 6 typed payload)."""
 
-import json
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -89,7 +88,11 @@ class TestSubmitEndpoint:
             "w2_ocr_texts": ["w2"],
             "form_1042s_ocr_texts": [],
         }
-        r = client.post("/api/v1/submit", json=payload)
+        r = client.post(
+            "/api/v1/submit",
+            json=payload,
+            headers={"Authorization": "Bearer test-key-not-a-secret"},
+        )
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["status"] == "success"
@@ -110,44 +113,9 @@ class TestSubmitEndpoint:
                 "income": {},
             }
         }
-        r = client.post("/api/v1/submit", json=payload)
-        assert r.status_code == 422
-
-
-class TestLegacyUploadEndpoint:
-    @patch("src.api.main.DocumentParser.parse_file")
-    @patch("src.api.main.TaxEngine.run_full_pipeline")
-    def test_legacy_multipart_path(self, mock_run, mock_parse):
-        mock_parse.return_value = "DUMMY OCR"
-        dummy = ReturnStateObject(tax_year=2025)
-        dummy.tax.total_tax_liability = 2000.0
-        dummy.tax.refund_or_owed = -500.0
-        dummy.fica.requires_form_843 = True
-        dummy.fica.incorrect_ss_withheld = 1000.0
-        dummy.fica.incorrect_medicare_withheld = 250.0
-        dummy.forms_required = ["8833"]
-        mock_run.return_value = (["outputs/x.json"], dummy)
-
-        mcq = {
-            "tax_year": 2025,
-            "visa_type": "F-1",
-            "first_us_arrival_year": 2024,
-            "tax_residence_country": "China",
-            "income_description": "TA",
-            "requires_services": True,
-            "is_qualified_expense": False,
-        }
         r = client.post(
-            "/api/v1/upload-and-process",
-            data={"mcq_answers_json": json.dumps(mcq)},
-            files={
-                "i94_file": ("i94.pdf", b"x", "application/pdf"),
-                "w2_files": ("w2.pdf", b"y", "application/pdf"),
-            },
+            "/api/v1/submit",
+            json=payload,
+            headers={"Authorization": "Bearer test-key-not-a-secret"},
         )
-        assert r.status_code == 200
-        body = r.json()
-        assert body["status"] == "success"
-        assert body["federal_refund_or_owed"] == -500.0
-        assert body["fica_refund_amount"] == 1250.0
-        assert body["forms_required"] == ["8833"]
+        assert r.status_code == 422

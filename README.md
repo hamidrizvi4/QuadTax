@@ -51,8 +51,11 @@ cd nra-tax-engine
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env            # set OPENAI_API_KEY for live OCR/classification
+                              # + QUADTAX_API_KEY (REQUIRED — server fails closed
+                              #   with HTTP 503 if missing; protects /submit,
+                              #   /ocr, /packet)
 
-pytest -q                               # 302 tests
+pytest -q                               # 317 tests
 python -m scripts.audit_treaties        # treaty DB status (66/66 verified)
 python -m scripts.qa_end_to_end         # full traced sample return (no API key needed)
 ```
@@ -67,8 +70,14 @@ python -m src.cli generate --intake-json sample_intake.json --output packet/
 cd nra-tax-client
 npm install
 npm run sync-api      # regenerate TS types from the engine's OpenAPI schema
+cp .env.example .env.local   # set QUADTAX_ENGINE_URL + QUADTAX_API_KEY
+                              # (SERVER-SIDE only — never use NEXT_PUBLIC_)
 npm run dev           # http://localhost:3000
 ```
+
+> **Auth note:** the browser only talks to same-origin Next.js proxy routes
+> (`/api/submit`, `/api/ocr`, `/api/packet`). Those routes hold the engine
+> `QUADTAX_API_KEY` server-side, so it never ships in the client bundle.
 
 ---
 

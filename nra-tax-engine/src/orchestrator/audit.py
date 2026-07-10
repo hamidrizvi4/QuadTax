@@ -36,6 +36,21 @@ logger = logging.getLogger(__name__)
 
 _AUDIT_DIR_ENV = "QUADTAX_AUDIT_DIR"
 
+# Field names that carry direct identifiers / financial account numbers. These
+# must never be written to the audit log in plaintext — full values are hashed
+# for tamper-detection, but the human-readable preview redacts them.
+_PII_KEYS = {
+    "ssn",
+    "itin",
+    "passport_number",
+    "spouse_ssn_or_itin",
+    "spouse_ssn",
+    "spouse_itin",
+    "routing_number",
+    "account_number",
+    "bank_account_number",
+}
+
 
 @dataclass
 class AuditEntry:
@@ -73,10 +88,17 @@ def _json_default(o: Any) -> Any:
 
 
 def _preview(value: Any, max_keys: int = 8) -> Optional[dict]:
-    """Return a small dict snapshot of ``value`` suitable for inclusion in the entry."""
+    """Return a small dict snapshot of ``value`` suitable for inclusion in the entry.
+
+    PII keys are redacted so SSN/ITIN/passport/bank details are never written
+    to the audit log in plaintext. The full values are still hashed (see
+    ``_stable_hash``) for tamper-detection.
+    """
     if isinstance(value, dict):
         items = list(value.items())[:max_keys]
-        return {k: _shrink(v) for k, v in items}
+        return {
+            k: "[REDACTED]" if k in _PII_KEYS else _shrink(v) for k, v in items
+        }
     return None
 
 
