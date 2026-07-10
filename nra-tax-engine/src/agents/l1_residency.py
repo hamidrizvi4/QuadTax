@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from src.agents._llm_safety import safe_parse
 from src.functions.spt_calculator import SubstantialPresenceCalculator
+from src.llm_config import PRIMARY_MODEL, SECONDARY_MODEL, get_openai_client
 
 if TYPE_CHECKING:
     from src.orchestrator.state import ReturnStateObject
@@ -45,9 +46,7 @@ class ResidencyAgent:
                 cross-checking of critical numeric fields.
         """
         if llm_client is None:
-            # Lazy import to avoid crash if no api key during setup without client
-            from openai import OpenAI
-            self.llm_client = OpenAI()
+            self.llm_client = get_openai_client()
         else:
             self.llm_client = llm_client
         self.secondary_llm_client = secondary_llm_client
@@ -87,14 +86,14 @@ class ResidencyAgent:
 
         extracted_days: I94DayCountParams = safe_parse(
             primary_client=self.llm_client,
-            primary_model="gpt-4o-2024-08-06",
+            primary_model=PRIMARY_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             response_format=I94DayCountParams,
             secondary_client=self.secondary_llm_client,
-            secondary_model="gpt-4o-mini" if self.secondary_llm_client else None,
+            secondary_model=SECONDARY_MODEL if self.secondary_llm_client else None,
             critical_fields=["days_current_year", "days_minus_1", "days_minus_2"],
         )
 
