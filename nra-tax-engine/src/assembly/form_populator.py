@@ -37,6 +37,31 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Maps an internal form registry key to the IRS fillable-PDF filename stem
+# vendored under ``assets/templates/<year>/``. The IRS publishes these with an
+# ``f`` prefix (e.g. ``f1040nr.pdf``) and encodes schedules as ``f1040nro``
+# (Schedule OI), ``f1040nra`` (Schedule A), ``f1040nrn`` (Schedule NEC). Forms
+# without an entry fall back to ``<form_name>.pdf`` for backward compatibility.
+_IRS_TEMPLATE_STEMS = {
+    "1040-NR": "f1040nr",
+    "Schedule-OI": "f1040nro",
+    "Schedule-A": "f1040nra",
+    "Schedule-NEC": "f1040nrn",
+    "8843": "f8843",
+    "8833": "f8833",
+    "843": "f843",
+    "W-7": "fw7",
+    "6251": "f6251",
+    "2210": "f2210",
+    "8316": "f8316",
+}
+
+
+def _template_stem(form_name: str) -> str:
+    """Resolve a registry form name to its vendored IRS PDF filename stem."""
+    return _IRS_TEMPLATE_STEMS.get(form_name, form_name)
+
+
 # Forms always attached to a 1040-NR regardless of treaty / FICA paths.
 _ALWAYS_REQUIRED = ["1040-NR", "Schedule-OI", "8843"]
 
@@ -93,7 +118,7 @@ class FormPopulator:
 
             field_map = FORM_REGISTRY[form_name](current_state)
             stem = self._safe_stem(current_state, form_name)
-            template_path = self.templates_dir / f"{form_name}.pdf"
+            template_path = self.templates_dir / f"{_template_stem(form_name)}.pdf"
 
             if template_path.exists():
                 pdf_out = out_path / f"{stem}_{form_name}.pdf"
@@ -144,9 +169,10 @@ class FormPopulator:
 
         reader = PdfReader(str(template_path))
         writer = PdfWriter()
-
-        for page in reader.pages:
-            writer.add_page(page)
+        # clone_document_from_reader copies pages AND the /AcroForm dictionary
+        # (manual add_page drops it, which makes update_page_form_field_values
+        # raise "No /AcroForm dictionary in PDF of PdfWriter Object").
+        writer.clone_document_from_reader(reader)
 
         # AcroForm fill — pypdf wants string values.
         str_data = {k: _fmt_value(v) for k, v in data.items() if not k.startswith("_")}

@@ -1,6 +1,8 @@
 """Tests for the Layer 9 Form Populator (Phase 3 architecture)."""
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -106,3 +108,59 @@ class TestFormPopulatorScheduleInjection:
         )
         outputs = populator.generate_filing_package(state)
         assert any("Schedule-A" in p for p in outputs)
+
+
+class TestFormPopulatorVendoredTemplates:
+    """When IRS fillable PDFs are vendored, the populator emits real PDF files
+    (not JSON field-map fallbacks) and does not crash on the missing AcroForm
+    dictionary.
+
+    NOTE: filling the values requires the per-form ``*_fields.json`` remap
+    (human-readable field_map keys -> IRS AcroForm field names); without those
+    the produced PDFs are valid but currently unfilled. This test guards the
+    file-emission path, not field-fill correctness.
+    """
+
+    def test_emits_pdf_not_json_when_templates_present(self):
+        repo_templates = (
+            Path(__file__).resolve().parents[2] / "assets" / "templates" / "2025"
+        )
+        if not (repo_templates / "f1040nr.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.first_name = "Ming"
+        state.identity.last_name = "Chen"
+        state.identity.us_address_line1 = "123 Main St"
+        state.identity.us_city = "Boston"
+        state.identity.us_state = "MA"
+        state.identity.us_zip = "02115"
+        state.identity.country_of_citizenship = "CN"
+        state.residency.exempt_visa_type = "F-1"
+        state.residency.years_in_exempt_status = 2
+        state.residency.spt_days_current_year = 300
+        state.tax.total_tax_liability = 2762.0
+        state.tax.total_withholding_credits = 4500.0
+        state.tax.refund_or_owed = -1738.0
+        state.forms_required = ["8833", "843"]
+        state.ready_for_assembly = True
+
+        out = tempfile.mkdtemp()
+        populator = FormPopulator(
+            templates_dir=str(repo_templates.parent),
+            outputs_dir=out,
+            tax_year=2025,
+        )
+        generated = populator.generate_filing_package(state)
+
+        pdfs = [p for p in generated if p.endswith(".pdf")]
+        jsons = [p for p in generated if p.endswith(".fieldmap.json")]
+        assert len(pdfs) > 0, "expected real PDF outputs when templates are present"
+        assert len(jsons) == 0, "JSON fallback must not be used when templates vendored"
+
+        for p in pdfs:
+            assert open(p, "rb").read(5) == b"%PDF-"
+
+        names = " ".join(os.path.basename(p) for p in pdfs)
+        assert "1040-NR" in names
+        assert "8843" in names
