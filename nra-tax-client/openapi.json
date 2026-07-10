@@ -44,7 +44,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
       }
     },
     "/api/v1/healthz": {
@@ -109,7 +114,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
       }
     },
     "/api/v1/packet": {
@@ -118,8 +128,13 @@
           "tax"
         ],
         "summary": "Download Packet",
-        "description": "Serve a generated packet file. Only allows files under outputs/ directory.",
+        "description": "Serve a generated packet file. Only allows files under outputs/ directory.\n\nUses ``os.path.commonpath`` rather than ``str.startswith`` \u2014 a naive\nstring-prefix check would wrongly admit a sibling directory such as\n``outputs_evil/`` because the *string* ``\"outputs_evil\"`` starts with\n``\"outputs\"``, even though it is not a descendant of the outputs\ndirectory on the filesystem.",
         "operationId": "download_packet_api_v1_packet_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
         "parameters": [
           {
             "name": "path",
@@ -1114,6 +1129,13 @@
         },
         "type": "object",
         "title": "W2Extracted"
+      }
+    },
+    "securitySchemes": {
+      "APIKeyHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization"
       }
     }
   }

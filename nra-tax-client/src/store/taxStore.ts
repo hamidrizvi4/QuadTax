@@ -12,6 +12,16 @@ type IntakeNYContext = components['schemas']['IntakeNYContext'];
 type IntakePayload = components['schemas']['IntakePayload'];
 type IntakeResidency = components['schemas']['IntakeResidency'];
 
+// OCR extraction types — sourced from the engine's OpenAPI schema (see
+// /api/v1/ocr in nra-tax-engine/src/api/ocr_endpoint.py). Re-exported under
+// their original names so existing imports (`@/store/taxStore`) don't churn.
+// Regenerate via `npm run sync-api` whenever the engine's OCR schemas change.
+export type W2Extracted = components['schemas']['W2Extracted'];
+export type Form1042SExtracted = components['schemas']['Form1042SExtracted'];
+export type Form1099Extracted = components['schemas']['Form1099Extracted'];
+export type I94Extracted = components['schemas']['I94Extracted'];
+export type OcrResult = components['schemas']['OcrResult'];
+
 // ── New intake state types ─────────────────────────────────────────────────
 
 export interface EligibilityAnswers {
@@ -39,57 +49,6 @@ export interface VisaDetails {
   changedVisaDuring2025: boolean | null;
   isStillInUs: boolean | null;
   travelHistory: TravelEntry[];
-}
-
-export interface W2Extracted {
-  box_1_wages: number;
-  box_2_fed_withholding: number;
-  box_3_ss_wages: number;
-  box_4_ss_withheld: number;
-  box_5_medicare_wages: number;
-  box_6_medicare_withheld: number;
-  box_17_state_income_tax: number;
-  box_18_local_wages: number;
-  box_19_local_income_tax: number;
-  box_20_locality_name: string;
-  employer_name: string;
-  employer_ein: string;
-  employee_name: string;
-  employee_ssn_or_itin: string;
-  tax_year: number;
-}
-
-export interface Form1042SExtracted {
-  income_code: number;
-  gross_income: number;
-  exemption_rate: number;
-  exemption_code: string;
-  fed_withheld: number;
-  chapter_indicator: number;
-  recipient_name: string;
-  withholding_agent_name: string;
-}
-
-export interface Form1099Extracted {
-  form_kind: string;
-  gross_amount: number;
-  fed_withholding: number;
-  payer_name: string;
-}
-
-export interface I94Extracted {
-  days_current_year: number;
-  days_minus_1: number;
-  days_minus_2: number;
-  latest_entry_date: string;
-  latest_class_of_admission: string;
-}
-
-export interface OcrResult {
-  i94: I94Extracted | null;
-  w2s: W2Extracted[];
-  form_1042s: Form1042SExtracted[];
-  form_1099s: Form1099Extracted[];
 }
 
 export interface ExtrasAnswers {
@@ -441,7 +400,7 @@ export const useTaxStore = create<TaxState>()(
             ].join(' ')
           : '';
 
-        const w2OcrTexts = ocr.w2s.map(
+        const w2OcrTexts = (ocr.w2s ?? []).map(
           (w) =>
             `W-2 Extracted: ` +
             `Box 1 Wages: ${w.box_1_wages}, ` +
@@ -457,7 +416,7 @@ export const useTaxStore = create<TaxState>()(
             `Employer: ${w.employer_name}, EIN: ${w.employer_ein}`,
         );
 
-        const form1042sOcrTexts = ocr.form_1042s.map(
+        const form1042sOcrTexts = (ocr.form_1042s ?? []).map(
           (f) =>
             `1042-S Extracted: ` +
             `Income Code: ${f.income_code}, ` +

@@ -71,6 +71,12 @@ export interface paths {
         /**
          * Download Packet
          * @description Serve a generated packet file. Only allows files under outputs/ directory.
+         *
+         *     Uses ``os.path.commonpath`` rather than ``str.startswith`` — a naive
+         *     string-prefix check would wrongly admit a sibling directory such as
+         *     ``outputs_evil/`` because the *string* ``"outputs_evil"`` starts with
+         *     ``"outputs"``, even though it is not a descendant of the outputs
+         *     directory on the filesystem.
          */
         get: operations["download_packet_api_v1_packet_get"];
         put?: never;
