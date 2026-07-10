@@ -39,8 +39,8 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "line_2_period_of_claim": f"{state.tax_year}",
         "line_3_tax_type": "FICA",
         "line_4_explanation_irc_section": "IRC §3121(b)(19)",
-        "line_5_employer_name": "",  # intake-derived
-        "line_5_employer_ein": "",  # intake-derived
+        "line_5_employer_name": state.income.employer_name,
+        "line_5_employer_ein": state.income.employer_ein,
         "line_6_dates_withheld": f"01-01-{state.tax_year} through 12-31-{state.tax_year}",
         "line_7_explanation_text": explanation,
         "signature_name": f"{ident.first_name} {ident.last_name}".strip(),

@@ -32,8 +32,8 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "name": f"{ident.first_name} {ident.last_name}".strip(),
         "tin": ident.primary_tin,
         # Schedule A — Allocation of wages
-        "sched_A_employer_name": "",  # intake-derived (first employer)
-        "sched_A_employer_address": "",  # intake-derived
+        "sched_A_employer_name": state.income.employer_name,
+        "sched_A_employer_address": "",  # not collected separately from employer_name today
         "sched_A_total_wages_box_1": _fmt_money(state.income.total_w2_wages),
         "sched_A_total_days": 365,  # default; intake should override
         "sched_A_ny_workdays": 0,    # intake-derived

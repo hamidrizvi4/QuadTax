@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.intake.intake_schema import (
+    IntakeFICA,
     IntakeIdentity,
     IntakeIncome,
     IntakeNYContext,
@@ -128,3 +129,17 @@ class TestMCQRouter:
         assert f1040["last_name"] == "Chen"
         assert f1040["us_state"] == "NY"
         assert f1040["identifying_number"] == "912345678"
+
+    def test_populate_state_seeds_employer_from_fica_intake(self):
+        """Regression test: employer name/EIN typed into the FICA intake step
+        must reach state (and from there, Forms 843/8316/IT-203-B) instead of
+        being silently dropped."""
+        payload = _full_payload()
+        payload.fica = IntakeFICA(
+            employer_attempted_refund=True,
+            employer_name="New York University",
+            employer_ein="13-5562308",
+        )
+        state = self.router.populate_state(payload)
+        assert state.income.employer_name == "New York University"
+        assert state.income.employer_ein == "13-5562308"

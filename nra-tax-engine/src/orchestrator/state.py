@@ -260,6 +260,19 @@ class IncomeState(BaseModel):
         description="Aggregate Medicare tax erroneously withheld from W-2s (Box 6)."
     )
 
+    employer_name: str = Field(
+        default="",
+        description=(
+            "Primary employer's name, from intake or W-2 OCR. Used on Form "
+            "843's and Form 8316's employer-identification lines and NY "
+            "IT-203-B Schedule A."
+        ),
+    )
+    employer_ein: str = Field(
+        default="",
+        description="Primary employer's EIN, from intake or W-2 OCR. Used on Form 843.",
+    )
+
 class TreatyState(BaseModel):
     """L6 (part 1) — Tax treaty application results.
 

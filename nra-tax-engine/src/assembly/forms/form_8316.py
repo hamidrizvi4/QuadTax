@@ -46,6 +46,6 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         ),
         "q7_claimed_against_federal_tax": "/2",  # No
         "q7_claimed_against_federal_tax_amount": "",
-        "employer_name": "",  # intake-derived; combined name+address per form's single field
+        "employer_name": state.income.employer_name,  # combined name+address field on the real PDF
         "signature_phone": state.identity.daytime_phone,
     }

@@ -63,6 +63,12 @@ class MCQRouter:
         # but the visa_type and arrival year come from intake.
         state.residency.exempt_visa_type = payload.residency.visa_type
 
+        # Employer identification for Form 843 / 8316 / IT-203-B. Layer 3
+        # (income) does not derive this from W-2 OCR text, so it must come
+        # from intake or it stays blank on every downstream form.
+        state.income.employer_name = payload.fica.employer_name
+        state.income.employer_ein = payload.fica.employer_ein
+
         return state
 
     def to_mcq_answers(self, payload: IntakePayload) -> Dict[str, Any]:
