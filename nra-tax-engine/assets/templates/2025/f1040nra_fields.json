@@ -1,0 +1,11 @@
+{
+  "line_1a_state_local_income_tax": "form1040-NR[0].Page1[0].Line1a_ReadOrder[0].f1_3[0]",
+  "line_1b_salt_cap_bite_note": "form1040-NR[0].Page1[0].f1_4[0]",
+  "line_2_cash_gifts": "form1040-NR[0].Page1[0].Line2_ReadOrder[0].f1_5[0]",
+  "line_3_noncash_gifts": "form1040-NR[0].Page1[0].f1_6[0]",
+  "line_4_carryover": "form1040-NR[0].Page1[0].f1_7[0]",
+  "line_5_total_gifts": "form1040-NR[0].Page1[0].f1_8[0]",
+  "line_6_casualty_disaster": "form1040-NR[0].Page1[0].f1_9[0]",
+  "line_7_other_itemized": "form1040-NR[0].Page1[0].f1_11[0]",
+  "line_8_total_itemized": "form1040-NR[0].Page1[0].f1_12[0]"
+}

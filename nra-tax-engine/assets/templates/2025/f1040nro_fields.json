@@ -1,0 +1,11 @@
+{
+  "item_A_country_citizenship": "form1040-NR[0].Page1[0].f1_3[0]",
+  "item_B_country_tax_residence": "form1040-NR[0].Page1[0].f1_4[0]",
+  "item_C_visa_type": "form1040-NR[0].Page1[0].f1_5[0]",
+  "item_D_immigration_status_change": "form1040-NR[0].Page1[0].c1_4[0]",
+  "item_G_days_current_year": "form1040-NR[0].Page1[0].f1_25[0]",
+  "item_G_days_year_minus_1": "form1040-NR[0].Page1[0].f1_24[0]",
+  "item_G_days_year_minus_2": "form1040-NR[0].Page1[0].f1_23[0]",
+  "item_H_filed_1040_prior_year": "form1040-NR[0].Page1[0].c1_6[0]",
+  "item_J_871d_election": "form1040-NR[0].Page1[0].c1_13[0]"
+}

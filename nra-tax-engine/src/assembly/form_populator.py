@@ -119,10 +119,11 @@ class FormPopulator:
             field_map = FORM_REGISTRY[form_name](current_state)
             stem = self._safe_stem(current_state, form_name)
             template_path = self.templates_dir / f"{_template_stem(form_name)}.pdf"
+            remap = self._load_remap(_template_stem(form_name))
 
             if template_path.exists():
                 pdf_out = out_path / f"{stem}_{form_name}.pdf"
-                self._inject_pdf_data(template_path, field_map, pdf_out)
+                self._inject_pdf_data(template_path, field_map, pdf_out, remap)
                 generated.append(str(pdf_out))
             else:
                 # Template not yet vendored — emit the field-map as JSON so the
@@ -153,13 +154,37 @@ class FormPopulator:
             name = "filer"
         return name.replace(" ", "_")
 
+    def _load_remap(self, stem: str) -> Dict[str, str]:
+        """Load the human-key -> AcroForm-field-name remap for a form stem.
+
+        The per-form ``<stem>_fields.json`` (vendored alongside the IRS PDF)
+        bridges the human-readable keys emitted by ``compute_field_map`` to the
+        IRS AcroForm field names (e.g. ``last_name`` -> ``topmostSubform[0].Page1[0].f1_02[0]``).
+        Returns ``{}`` when no remap is vendored, so the form degrades to an
+        unfilled template rather than crashing.
+        """
+        path = self.templates_dir / f"{stem}_fields.json"
+        if not path.exists():
+            return {}
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Failed to parse remap %s: %s", path, exc)
+            return {}
+
     def _inject_pdf_data(
         self,
         template_path: Path,
         data: Dict[str, Any],
         output_path: Path,
+        remap: Dict[str, str] | None = None,
     ) -> None:
-        """Inject ``data`` into AcroForm fields of ``template_path`` and flatten."""
+        """Inject ``data`` into AcroForm fields of ``template_path`` and flatten.
+
+        ``remap`` translates human-readable field_map keys to IRS AcroForm field
+        names. Keys absent from the remap are skipped (the template renders
+        unfilled for those lines).
+        """
         if not os.path.exists(template_path):
             logger.warning(
                 "Template %s does not exist. Skipping physical PDF generation.",
@@ -174,8 +199,21 @@ class FormPopulator:
         # raise "No /AcroForm dictionary in PDF of PdfWriter Object").
         writer.clone_document_from_reader(reader)
 
-        # AcroForm fill — pypdf wants string values.
-        str_data = {k: _fmt_value(v) for k, v in data.items() if not k.startswith("_")}
+        # AcroForm fill — translate keys via the remap, pypdf wants strings.
+        remap = remap or {}
+        str_data: Dict[str, str] = {}
+        for k, v in data.items():
+            if k.startswith("_"):
+                continue
+            acro = remap.get(k)
+            if acro is None:
+                continue
+            str_data[acro] = _fmt_value(v)
+        if not str_data:
+            logger.warning(
+                "No mappable fields for %s; PDF will render unfilled.",
+                template_path,
+            )
         for page in writer.pages:
             writer.update_page_form_field_values(page, str_data)
 
