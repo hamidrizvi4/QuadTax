@@ -8,8 +8,18 @@
   "part_I_passport_issuing_country": "topmostSubform[0].Page1[0].f1_12[0]",
   "part_I_passport_number": "topmostSubform[0].Page1[0].f1_13[0]",
   "part_I_days_current_year": "topmostSubform[0].Page1[0].f1_14[0]",
+  "part_I_days_year_minus_1": "topmostSubform[0].Page1[0].f1_15[0]",
+  "part_I_days_year_minus_2": "topmostSubform[0].Page1[0].f1_16[0]",
+  "part_I_days_excluded_for_spt": "topmostSubform[0].Page1[0].f1_17[0]",
   "part_III_line_9_school_name": "topmostSubform[0].Page1[0].f1_26[0]",
   "part_III_line_10_director_name": "topmostSubform[0].Page1[0].f1_27[0]",
-  "part_III_line_12_intend_to_remain_us": "topmostSubform[0].Page1[0].c1_2[0]",
-  "part_III_line_13_taken_steps_to_remain": "topmostSubform[0].Page1[0].c1_3[0]"
+  "part_III_line_11_visa_yr_minus_6": "topmostSubform[0].Page1[0].f1_28[0]",
+  "part_III_line_11_visa_yr_minus_5": "topmostSubform[0].Page1[0].f1_29[0]",
+  "part_III_line_11_visa_yr_minus_4": "topmostSubform[0].Page1[0].f1_30[0]",
+  "part_III_line_11_visa_yr_minus_3": "topmostSubform[0].Page1[0].f1_31[0]",
+  "part_III_line_11_visa_yr_minus_2": "topmostSubform[0].Page1[0].f1_32[0]",
+  "part_III_line_11_visa_yr_minus_1": "topmostSubform[0].Page1[0].f1_33[0]",
+  "part_III_line_12_exempt_more_than_5_years": "topmostSubform[0].Page1[0].c1_2[0]",
+  "part_III_line_13_applied_for_lpr_status": "topmostSubform[0].Page1[0].c1_3[0]",
+  "part_III_line_14_explanation": "topmostSubform[0].Page1[0].f1_34[0]"
 }

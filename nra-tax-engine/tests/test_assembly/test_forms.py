@@ -132,18 +132,20 @@ class TestScheduleNEC:
     def test_no_fdap_yields_empty_money_fields(self):
         state = _build_china_art20c_state()  # no FDAP for this filer
         m = compute("Schedule-NEC", state)
-        assert m["line_15c_total_30"] == ""
-        assert m["line_12_scholarship_14"] == ""
-        assert m["line_16_tax_total"] == ""
+        assert m["line_14_tax_30"] == ""
+        assert m["line_12_scholarship_other_rate"] == ""
+        assert m["line_15_tax_total"] == ""
 
     def test_with_fdap_routes_to_correct_column(self):
         state = _build_china_art20c_state()
         state.income.fdap_taxable_total = 5000.0
         state.tax.fdap_tax_liability = 700.0
         m = compute("Schedule-NEC", state)
-        # F-1 → 14% column gets the scholarship.
-        assert m["line_12_scholarship_14"] == "5000"
-        assert m["line_16_tax_total"] == "700"
+        # F-1 → this form has no dedicated 14% column, so it lands in "Other rate".
+        assert m["line_12_scholarship_other_rate"] == "5000"
+        assert m["line_13_subtotal_other_rate"] == "5000"
+        assert m["line_14_tax_other_rate"] == "5000"
+        assert m["line_15_tax_total"] == "700"
 
 
 class TestScheduleA:
@@ -173,9 +175,41 @@ class TestForm8843:
         m = compute("8843", state)
         assert m["part_I_name"] == "Ming Chen"
         assert m["part_I_visa_type_current"] == "F-1"
-        assert m["part_III_relevant"] is True
-        assert m["part_III_line_11_years_in_exempt_status"] == 2
-        assert m["part_IV_relevant"] is False
+        assert m["_part_III_relevant"] is True
+        assert m["_part_IV_relevant"] is False
+
+    def test_line_4a_uses_raw_presence_not_spt_adjusted(self):
+        """spt_days_current_year is 0 for a fully-exempt filer; line 4a must
+        still report actual physical presence, not the SPT-purposes count."""
+        state = _build_china_art20c_state()
+        state.residency.spt_days_current_year = 0  # fully excluded as exempt
+        state.residency.days_present_current_year = 300
+        state.residency.days_present_year_minus_1 = 200
+        state.residency.days_present_year_minus_2 = 50
+        m = compute("8843", state)
+        assert m["part_I_days_current_year"] == 300
+        assert m["part_I_days_year_minus_1"] == 200
+        assert m["part_I_days_year_minus_2"] == 50
+        assert m["part_I_days_excluded_for_spt"] == 300
+
+    def test_line_11_visa_grid_reflects_first_exempt_year(self):
+        """tax_year=2025, years_in_exempt_status=2 -> first exempt year 2024,
+        which is the most recent slot (yr_minus_1) in the 2019-2024 window."""
+        state = _build_china_art20c_state()
+        m = compute("8843", state)
+        assert m["part_III_line_11_visa_yr_minus_1"] == "F-1"  # 2024
+        assert m["part_III_line_11_visa_yr_minus_2"] == ""  # 2023, pre-arrival
+        assert m["part_III_line_11_visa_yr_minus_6"] == ""  # 2019, pre-arrival
+
+    def test_line_12_exempt_more_than_5_years(self):
+        state = _build_china_art20c_state()
+        state.residency.years_in_exempt_status = 2
+        m = compute("8843", state)
+        assert m["part_III_line_12_exempt_more_than_5_years"] is False
+
+        state.residency.years_in_exempt_status = 6
+        m = compute("8843", state)
+        assert m["part_III_line_12_exempt_more_than_5_years"] is True
 
 
 class TestForm8833:

@@ -130,8 +130,30 @@ class ResidencyState(BaseModel):
             "year, as counted by the deterministic SPT calculator. Does NOT "
             "include exempt days for F/J/Q visa holders (those are subtracted "
             "before this value is set). Used as input to the SPT formula "
-            "(current × 1 + prior_1 × 1/3 + prior_2 × 1/6 ≥ 183)."
+            "(current × 1 + prior_1 × 1/3 + prior_2 × 1/6 ≥ 183). Do NOT use "
+            "this for Form 8843 line 4a, which wants raw physical presence "
+            "regardless of exempt status — use days_present_* below instead."
         ),
+    )
+
+    days_present_current_year: int = Field(
+        default=0,
+        ge=0,
+        le=366,
+        description=(
+            "Raw days physically present in the US during the current tax "
+            "year, BEFORE any exempt-individual exclusion — unlike "
+            "spt_days_current_year, this is never zeroed out for an exempt "
+            "F/J/M/Q filer. This is what Form 8843 Part I line 4a asks for."
+        ),
+    )
+    days_present_year_minus_1: int = Field(
+        default=0, ge=0, le=366,
+        description="Raw days physically present in the US during tax_year - 1.",
+    )
+    days_present_year_minus_2: int = Field(
+        default=0, ge=0, le=366,
+        description="Raw days physically present in the US during tax_year - 2.",
     )
 
     exempt_visa_type: Optional[str] = Field(

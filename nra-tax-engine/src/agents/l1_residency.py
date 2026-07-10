@@ -116,6 +116,13 @@ class ResidencyAgent:
         current_state.residency.exempt_visa_type = result.get("exempt_visa_type")
         current_state.residency.years_in_exempt_status = result["years_in_exempt_status"]
 
+        # Raw (pre-exemption) physical-presence counts — Form 8843 line 4a
+        # wants actual days present regardless of exempt status, which
+        # spt_days_current_year does not represent for an exempt filer.
+        current_state.residency.days_present_current_year = extracted_days.days_current_year
+        current_state.residency.days_present_year_minus_1 = extracted_days.days_minus_1
+        current_state.residency.days_present_year_minus_2 = extracted_days.days_minus_2
+
         # Mark layer complete
         current_state.mark_layer_complete("L1")
 
