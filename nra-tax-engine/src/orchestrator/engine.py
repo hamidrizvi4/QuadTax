@@ -39,6 +39,22 @@ class OrchestrationError(RuntimeError):
     """Raised when a layer's dependencies are not satisfied."""
 
 
+class HumanReviewRequiredError(OrchestrationError):
+    """Raised when the human-in-loop gate blocks assembly.
+
+    Distinct from the base :class:`OrchestrationError` (a real orchestration
+    bug — dependencies violated) so callers, notably the API layer, can
+    surface ``reasons`` to the user as an actionable response instead of an
+    opaque failure.
+    """
+
+    def __init__(self, reasons: List[str]):
+        self.reasons = list(reasons)
+        super().__init__(
+            "Human review required before assembly: " + " | ".join(reasons)
+        )
+
+
 # Layer dependency graph. Each key is a layer id; each value is the set of
 # layers that must be marked complete before that layer may run.
 LAYER_DEPENDENCIES: Dict[str, List[str]] = {
@@ -342,10 +358,7 @@ class TaxEngine:
         # Human-in-loop gate. Any populated reason blocks assembly until the
         # API caller passes ``force_assembly=True``.
         if state.requires_human_review and not self.force_assembly:
-            raise OrchestrationError(
-                "Human review required before assembly: "
-                + " | ".join(state.requires_human_review)
-            )
+            raise HumanReviewRequiredError(state.requires_human_review)
 
         # Pre-assembly validation
         completed = set(state.completed_layers)

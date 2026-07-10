@@ -29,7 +29,7 @@ from src.api.auth import require_api_key
 from src.api.ocr_endpoint import router as ocr_router
 from src.intake.intake_schema import IntakePayload
 from src.intake.mcq_router import MCQRouter
-from src.orchestrator.engine import TaxEngine
+from src.orchestrator.engine import HumanReviewRequiredError, TaxEngine
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +191,15 @@ def submit(request: SubmitRequest) -> TaxProcessResponse:
             mcq_answers=mcq_dict,
             initial_state=seeded_state,
         )
+    except HumanReviewRequiredError as exc:
+        # Expected, actionable condition — the filer's situation is outside
+        # what this engine can safely automate. Surface the reasons instead
+        # of the opaque 500 every other pipeline failure gets, so the caller
+        # can show them and (if appropriate) resubmit with force_assembly.
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "human_review_required", "reasons": exc.reasons},
+        ) from exc
     except Exception as exc:  # noqa: BLE001
         _handle_pipeline_error(exc, correlation)
 

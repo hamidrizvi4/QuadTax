@@ -132,6 +132,48 @@ class TestSubmitEndpoint:
         )
         assert r.status_code == 422
 
+    @patch("src.api.main.TaxEngine.run_full_pipeline")
+    def test_submit_surfaces_human_review_reasons_not_opaque_500(self, mock_run):
+        """A HumanReviewRequiredError (e.g. a §6013 election or large foreign
+        gift the engine can't handle) must reach the caller as an actionable
+        422 with the reasons, not the generic opaque 500 every other
+        pipeline failure gets."""
+        from src.orchestrator.engine import HumanReviewRequiredError
+
+        mock_run.side_effect = HumanReviewRequiredError(
+            ["Elections: filer received gifts/bequests over $100,000 ... Form 3520 ..."]
+        )
+
+        payload = {
+            "intake": {
+                "identity": {
+                    "first_name": "Wei",
+                    "last_name": "Chen",
+                    "itin": "912345678",
+                    "filing_status": "single",
+                },
+                "residency": {"tax_year": 2025, "visa_type": "F-1", "first_us_arrival_year": 2024},
+                "income": {
+                    "income_description": "TA",
+                    "requires_services": True,
+                    "is_qualified_expense": False,
+                },
+                "elections": {"large_foreign_gifts_over_100k": True},
+            },
+            "i94_ocr_text": "i94",
+            "w2_ocr_texts": ["w2"],
+            "form_1042s_ocr_texts": [],
+        }
+        r = client.post(
+            "/api/v1/submit",
+            json=payload,
+            headers={"Authorization": "Bearer test-key-not-a-secret"},
+        )
+        assert r.status_code == 422, r.text
+        body = r.json()["detail"]
+        assert body["error"] == "human_review_required"
+        assert any("Form 3520" in reason for reason in body["reasons"])
+
 
 class TestOcrEndpoint:
     """POST /api/v1/ocr — extracts structured fields from uploaded documents."""

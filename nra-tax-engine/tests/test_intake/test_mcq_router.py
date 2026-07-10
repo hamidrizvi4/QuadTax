@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.intake.intake_schema import (
+    IntakeElections,
     IntakeFICA,
     IntakeIdentity,
     IntakeIncome,
@@ -143,3 +144,14 @@ class TestMCQRouter:
         state = self.router.populate_state(payload)
         assert state.income.employer_name == "New York University"
         assert state.income.employer_ein == "13-5562308"
+
+    def test_populate_state_seeds_elections_from_intake(self):
+        """Regression test: elections typed at intake (§6013 election, large
+        foreign gifts, closer-connection exception) must reach state so
+        validate_post_l1 can block automatic assembly, instead of being
+        silently dropped like the employer data was."""
+        payload = _full_payload()
+        payload.elections = IntakeElections(large_foreign_gifts_over_100k=True)
+        state = self.router.populate_state(payload)
+        assert state.elections.large_foreign_gifts_over_100k is True
+        assert state.elections.section_6013g_election is False

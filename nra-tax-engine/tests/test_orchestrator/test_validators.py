@@ -33,6 +33,37 @@ class TestPostL1:
         validate_post_l1(state)
         assert state.requires_human_review == []
 
+    def test_6013g_election_flagged(self):
+        state = ReturnStateObject()
+        state.elections.section_6013g_election = True
+        validate_post_l1(state)
+        assert any("6013" in r for r in state.requires_human_review)
+
+    def test_6013h_election_flagged(self):
+        state = ReturnStateObject()
+        state.elections.section_6013h_election = True
+        validate_post_l1(state)
+        assert any("6013" in r for r in state.requires_human_review)
+
+    def test_large_foreign_gifts_flagged(self):
+        state = ReturnStateObject()
+        state.elections.large_foreign_gifts_over_100k = True
+        validate_post_l1(state)
+        assert any("3520" in r for r in state.requires_human_review)
+
+    def test_closer_connection_flagged(self):
+        state = ReturnStateObject()
+        state.elections.closer_connection_exception_claimed = True
+        validate_post_l1(state)
+        assert any("8840" in r for r in state.requires_human_review)
+
+    def test_no_elections_no_flag(self):
+        state = ReturnStateObject()
+        state.residency.spt_days_current_year = 300
+        state.residency.years_in_exempt_status = 2
+        validate_post_l1(state)
+        assert state.requires_human_review == []
+
 
 class TestPostL3:
     def test_negative_wages_flagged(self):

@@ -69,6 +69,17 @@ class MCQRouter:
         state.income.employer_name = payload.fica.employer_name
         state.income.employer_ein = payload.fica.employer_ein
 
+        # Elections/disclosures out of scope for this engine's NRA (§871)
+        # pipeline. validate_post_l1 blocks assembly when any is set.
+        state.elections.section_6013g_election = payload.elections.section_6013g_election
+        state.elections.section_6013h_election = payload.elections.section_6013h_election
+        state.elections.large_foreign_gifts_over_100k = (
+            payload.elections.large_foreign_gifts_over_100k
+        )
+        state.elections.closer_connection_exception_claimed = (
+            payload.elections.closer_connection_exception_claimed
+        )
+
         return state
 
     def to_mcq_answers(self, payload: IntakePayload) -> Dict[str, Any]:

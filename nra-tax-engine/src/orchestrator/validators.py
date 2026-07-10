@@ -52,6 +52,31 @@ def validate_post_l1(state: "ReturnStateObject") -> List[str]:
             "QuadTax computes the NRA portion only. A CPA must verify the "
             "resident-alien portion separately (Form 1040 + Form 1040-NR).",
         )
+
+    elections = state.elections
+    if elections.section_6013g_election or elections.section_6013h_election:
+        _flag(
+            state,
+            "Elections: §6013(g)/(h) election in effect — filer elected to be "
+            "treated as a US resident. This engine computes the NRA (§871) "
+            "return only; a §6013 election requires filing as a full resident "
+            "under §1 (worldwide income, Form 1040, not 1040-NR). A CPA must "
+            "prepare this return.",
+        )
+    if elections.large_foreign_gifts_over_100k:
+        _flag(
+            state,
+            "Elections: filer received gifts/bequests over $100,000 from a "
+            "foreign person or estate — Form 3520 disclosure is required. "
+            "This engine does not generate Form 3520; a CPA must prepare it.",
+        )
+    if elections.closer_connection_exception_claimed:
+        _flag(
+            state,
+            "Elections: filer is claiming the closer-connection-to-a-foreign-"
+            "country exception — Form 8840 disclosure is required. This "
+            "engine does not generate Form 8840; a CPA must prepare it.",
+        )
     return state.requires_human_review
 
 

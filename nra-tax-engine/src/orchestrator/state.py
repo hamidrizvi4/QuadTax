@@ -582,6 +582,37 @@ class TaxCalculatedState(BaseModel):
     )
 
 
+class ElectionsState(BaseModel):
+    """Tax elections / disclosures the filer has made, seeded from intake.
+
+    None of these are supported by the deterministic NRA (§871) pipeline
+    this engine implements — a §6013 election means filing as a full
+    resident under §1 (worldwide income, a different tax regime entirely),
+    and large foreign gifts / the closer-connection exception each require
+    a standalone form (3520 / 8840) this engine does not generate. When any
+    of these is True, validate_post_l1 blocks automatic assembly rather
+    than silently producing a return that omits a legally required
+    disclosure or applies the wrong tax regime.
+    """
+
+    section_6013g_election: bool = Field(
+        default=False,
+        description="§6013(g): NRA spouse of US person elected to be treated as resident.",
+    )
+    section_6013h_election: bool = Field(
+        default=False,
+        description="§6013(h): dual-status-year election to be treated as resident.",
+    )
+    large_foreign_gifts_over_100k: bool = Field(
+        default=False,
+        description="Received gifts/bequests over $100,000 from a foreign person or estate — triggers Form 3520.",
+    )
+    closer_connection_exception_claimed: bool = Field(
+        default=False,
+        description="Claiming the closer-connection-to-a-foreign-country exception — requires Form 8840.",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Master State Object
 # ---------------------------------------------------------------------------
@@ -629,6 +660,10 @@ class ReturnStateObject(BaseModel):
     ny: NYTaxState = Field(
         default_factory=NYTaxState,
         description="L9 output: NY state, NYC, and Yonkers tax results.",
+    )
+    elections: ElectionsState = Field(
+        default_factory=ElectionsState,
+        description="Intake-populated tax elections/disclosures out of scope for this engine.",
     )
 
     # ── Pipeline-level constants ──────────────────────────────────────

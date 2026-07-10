@@ -20,6 +20,22 @@ export interface SubmitArgs {
   form1042sOcrTexts?: string[];
 }
 
+/** Thrown when the engine's human-review gate blocks automated assembly —
+ * distinct from a real failure so callers can show the specific reasons
+ * instead of a generic error. */
+export class HumanReviewRequiredError extends Error {
+  reasons: string[];
+  constructor(reasons: string[]) {
+    super('This return needs a professional preparer.');
+    this.name = 'HumanReviewRequiredError';
+    this.reasons = reasons;
+  }
+}
+
+type SubmitErrorDetail =
+  | string
+  | { error: 'human_review_required'; reasons: string[] };
+
 /** Modern Phase-6 typed endpoint. Send OCR'd text + intake JSON. */
 export async function submitReturn(args: SubmitArgs): Promise<TaxProcessResponse> {
   const body: SubmitRequest = {
@@ -34,9 +50,15 @@ export async function submitReturn(args: SubmitArgs): Promise<TaxProcessResponse
     const r = await axios.post<TaxProcessResponse>(PROXY_SUBMIT, body);
     return r.data;
   } catch (err) {
-    const ax = err as AxiosError<{ detail?: string }>;
+    const ax = err as AxiosError<{ detail?: SubmitErrorDetail }>;
+    const detail = ax.response?.data?.detail;
+    if (typeof detail === 'object' && detail?.error === 'human_review_required') {
+      throw new HumanReviewRequiredError(detail.reasons);
+    }
     throw new Error(
-      ax.response?.data?.detail ?? ax.message ?? 'Failed to submit the return.',
+      (typeof detail === 'string' ? detail : undefined) ??
+        ax.message ??
+        'Failed to submit the return.',
     );
   }
 }
