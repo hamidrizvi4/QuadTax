@@ -1,0 +1,14 @@
+{
+  "q_a_income_per_visa": "A",
+  "q1_employer_repaid": "1",
+  "q1_employer_repaid_amount": "FillText01",
+  "q3_authorized_employer_claim": "3",
+  "q3_authorized_employer_claim_amount": "FillText03",
+  "q5_employer_claimed": "5",
+  "q5_employer_claimed_amount": "FillText05",
+  "explanation_no_employer_statement": "FillText06",
+  "q7_claimed_against_federal_tax": "7",
+  "q7_claimed_against_federal_tax_amount": "FillText10",
+  "employer_name": "FillText7",
+  "signature_phone": "FillText12"
+}

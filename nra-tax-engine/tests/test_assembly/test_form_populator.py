@@ -45,6 +45,18 @@ class TestFormPopulatorFieldMapFallback:
         state.tax.total_withholding_credits = 4500.0
         state.tax.refund_or_owed = -1738.0
         state.forms_required = ["8833", "843"]
+        state.treaty.applied_benefits = [
+            {
+                "country_name": "China",
+                "country_iso2": "CN",
+                "article_id": "20(c)",
+                "category": "student_personal_services",
+                "explanation": "US-China treaty Article 20(c) wage exemption.",
+                "exempt_amount": 5000.0,
+                "applies_after_saving_clause": True,
+                "requires_form_8833": True,
+            }
+        ]
         state.ready_for_assembly = True
 
         populator = FormPopulator(
