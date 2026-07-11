@@ -98,6 +98,11 @@ class ResidencyAgent:
         )
 
         # 2. The Deterministic Handoff
+        # visa_subtype is read from state (already seeded by MCQRouter from
+        # intake before the pipeline starts) rather than threaded through
+        # mcq_answers — it distinguishes a J-1 teacher/researcher's 2-year
+        # exempt window from a J-1 student's 5-year window; visa_type alone
+        # ("J-1") can't tell the two apart.
         calculator = SubstantialPresenceCalculator()
         result = calculator.evaluate_residency(
             tax_year=tax_year,
@@ -106,6 +111,7 @@ class ResidencyAgent:
             days_present_current_year=extracted_days.days_current_year,
             days_present_minus_1=extracted_days.days_minus_1,
             days_present_minus_2=extracted_days.days_minus_2,
+            visa_subtype=current_state.residency.visa_subtype,
         )
 
         # 3. State Mutation

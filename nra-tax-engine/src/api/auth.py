@@ -22,12 +22,18 @@ _api_key_header = APIKeyHeader(name=API_KEY_HEADER_NAME, auto_error=False)
 
 _API_KEY_ENV = "QUADTAX_API_KEY"
 
+# The literal example value shipped in .env.example. A deployer who copies
+# that file to .env and forgets to change this line would otherwise expose
+# every SSN/ITIN-bearing endpoint behind a publicly-known "secret".
+_PLACEHOLDER_API_KEY = "change-me-to-a-long-random-secret"
+
 
 def require_api_key(api_key: str | None = Security(_api_key_header)) -> str:
     """Validate the ``Bearer`` API key. Returns the token on success.
 
     Fails closed:
-      * 503 if ``QUADTAX_API_KEY`` is not configured on the server.
+      * 503 if ``QUADTAX_API_KEY`` is not configured on the server, or is
+        still set to the ``.env.example`` placeholder value.
       * 401 if the header is missing or the token is invalid.
 
     Comparison uses :func:`hmac.compare_digest` (constant-time) to avoid
@@ -37,6 +43,16 @@ def require_api_key(api_key: str | None = Security(_api_key_header)) -> str:
     if not expected:
         logger.critical(
             "%s is not set — refusing all authenticated requests.", _API_KEY_ENV
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Service unavailable: authentication not configured.",
+        )
+    if expected == _PLACEHOLDER_API_KEY:
+        logger.critical(
+            "%s is still set to the .env.example placeholder value — "
+            "refusing all authenticated requests.",
+            _API_KEY_ENV,
         )
         raise HTTPException(
             status_code=503,

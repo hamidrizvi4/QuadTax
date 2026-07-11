@@ -94,3 +94,33 @@ class TestResidencyAgent:
         assert updated_state.residency.is_exempt_individual is False
         assert updated_state.residency.spt_days_current_year == 120
         assert "L1" in updated_state.completed_layers
+
+    def test_process_residency_reads_visa_subtype_from_state(self):
+        """Regression test: visa_subtype (already seeded onto state by
+        MCQRouter before L1 runs) must actually reach the SPT calculator —
+        a J-1 teacher/researcher in year 3 must lose exemption (2-year
+        window), unlike a J-1 student in year 3 (still within 5 years)."""
+        mock_client = MagicMock()
+        mock_completion = MagicMock()
+        mock_completion.choices = [MagicMock()]
+        mock_completion.choices[0].message.parsed = I94DayCountParams(
+            days_current_year=365, days_minus_1=365, days_minus_2=365
+        )
+        mock_client.beta.chat.completions.parse.return_value = mock_completion
+
+        agent = ResidencyAgent(llm_client=mock_client)
+        state = ReturnStateObject()
+        state.residency.visa_subtype = "teacher_researcher"
+
+        updated_state = agent.process_residency(
+            i94_ocr_text="FAKE RECORD",
+            tax_year=2024,
+            visa_type="J-1",
+            first_us_arrival_year=2022,  # 3rd calendar year
+            current_state=state,
+        )
+
+        # 3rd year exceeds the 2-year teacher/researcher window -> not exempt,
+        # falls through to real SPT math (365+121+60=546 >= 183) -> resident.
+        assert updated_state.residency.is_exempt_individual is False
+        assert updated_state.residency.status == "resident_alien"

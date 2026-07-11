@@ -15,6 +15,9 @@ env/
 # Environment Variables
 .env
 
+# Generated filing packets — real SSN/ITIN/wage-bearing PDFs land here
+outputs/
+
 # IDE
 .vscode/
 .idea/
