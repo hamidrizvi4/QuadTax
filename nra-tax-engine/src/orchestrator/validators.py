@@ -52,6 +52,17 @@ def validate_post_l1(state: "ReturnStateObject") -> List[str]:
             "QuadTax computes the NRA portion only. A CPA must verify the "
             "resident-alien portion separately (Form 1040 + Form 1040-NR).",
         )
+    if residency.status == "resident_alien":
+        _flag(
+            state,
+            "L1: Filer is a resident alien for the full tax year (the "
+            "exempt-individual window has expired, or the SPT was "
+            "independently met) — this engine only generates Form 1040-NR "
+            "(nonresident) forms, which is the wrong form for a resident "
+            "alien. Any treaty benefit preserved by a saving-clause "
+            "exception (computed correctly above) must be claimed on the "
+            "correct Form 1040 return. A CPA must prepare this return.",
+        )
 
     elections = state.elections
     if elections.section_6013g_election or elections.section_6013h_election:

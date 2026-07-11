@@ -683,6 +683,22 @@ export interface components {
              * @enum {string}
              */
             prior_year_residency_status: "nonresident_alien" | "resident_alien" | "none";
+            /**
+             * First Us Entry Date
+             * @description ISO date of the filer's first-ever US entry. Only used for arrival-year dual-status detection when first_us_arrival_year == tax_year (i.e. this is genuinely their first year here).
+             */
+            first_us_entry_date?: string | null;
+            /**
+             * Is Still In Us
+             * @description False if the filer left the US before the end of the tax year.
+             * @default true
+             */
+            is_still_in_us: boolean;
+            /**
+             * Intended Departure Date
+             * @description ISO date the filer left (or intends to leave) the US, when is_still_in_us is False. Used for departure-year dual-status detection.
+             */
+            intended_departure_date?: string | null;
         };
         /** OcrResult */
         OcrResult: {

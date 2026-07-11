@@ -9,7 +9,8 @@ the deterministic SubstantialPresenceCalculator for the actual IRS rules.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from datetime import date
+from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -19,6 +20,15 @@ from src.llm_config import PRIMARY_MODEL, SECONDARY_MODEL, get_openai_client
 
 if TYPE_CHECKING:
     from src.orchestrator.state import ReturnStateObject
+
+
+def _parse_iso_date(value: Optional[str]) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 class I94DayCountParams(BaseModel):
@@ -103,8 +113,32 @@ class ResidencyAgent:
         # mcq_answers — it distinguishes a J-1 teacher/researcher's 2-year
         # exempt window from a J-1 student's 5-year window; visa_type alone
         # ("J-1") can't tell the two apart.
+        #
+        # Dual-status detection inputs, also read from state:
+        #   - first_day_in_us_current_year is only meaningful when this tax
+        #     year IS the filer's first-ever year in the US (arrival-year
+        #     trigger) — otherwise we have no gap-aware travel history to
+        #     know if there was a mid-year re-entry, so it's left None and
+        #     that trigger correctly never fires for continuous-presence
+        #     filers.
+        #   - last_day_in_us_current_year is only set when the filer told
+        #     intake they've already left (departure-year trigger).
+        first_day_in_us_current_year = None
+        if first_us_arrival_year == tax_year:
+            first_day_in_us_current_year = _parse_iso_date(
+                current_state.residency.first_us_entry_date
+            )
+        last_day_in_us_current_year = None
+        if not current_state.residency.is_still_in_us:
+            last_day_in_us_current_year = _parse_iso_date(
+                current_state.residency.intended_departure_date
+            )
+        prior_visa_was_resident = (
+            current_state.residency.prior_year_residency_status == "resident_alien"
+        )
+
         calculator = SubstantialPresenceCalculator()
-        result = calculator.evaluate_residency(
+        result = calculator.evaluate_residency_with_status_change(
             tax_year=tax_year,
             visa_type=visa_type,
             first_us_arrival_year=first_us_arrival_year,
@@ -112,6 +146,9 @@ class ResidencyAgent:
             days_present_minus_1=extracted_days.days_minus_1,
             days_present_minus_2=extracted_days.days_minus_2,
             visa_subtype=current_state.residency.visa_subtype,
+            first_day_in_us_current_year=first_day_in_us_current_year,
+            last_day_in_us_current_year=last_day_in_us_current_year,
+            prior_visa_was_resident=prior_visa_was_resident,
         )
 
         # 3. State Mutation
@@ -121,6 +158,10 @@ class ResidencyAgent:
         current_state.residency.is_exempt_individual = result["is_exempt_individual"]
         current_state.residency.exempt_visa_type = result.get("exempt_visa_type")
         current_state.residency.years_in_exempt_status = result["years_in_exempt_status"]
+        current_state.residency.is_dual_status = result["is_dual_status"]
+        current_state.residency.residency_start_date = result.get("residency_start_date")
+        current_state.residency.residency_end_date = result.get("residency_end_date")
+        current_state.residency.dual_status_reason = result.get("dual_status_reason")
 
         # Raw (pre-exemption) physical-presence counts — Form 8843 line 4a
         # wants actual days present regardless of exempt status, which

@@ -208,9 +208,13 @@ class TaxEngine:
             state.forms_required.append("W-7")
 
         # Estimated tax penalty — surface Form 2210 attachment if no safe harbor.
+        wh_report = state.withholding_report or {}
+        estimated_paid = float(wh_report.get("federal_estimated_payments", 0.0))
         penalty_result = etp_module.evaluate(
             current_year_total_tax=float(state.tax.total_tax_liability),
-            total_withholding_and_estimated=float(state.tax.total_withholding_credits),
+            total_withholding=float(state.tax.total_withholding_credits) - estimated_paid,
+            estimated_payments=estimated_paid,
+            tax_year=state.tax_year,
         )
         state.estimated_tax_penalty = penalty_result.to_dict_floats()
         if penalty_result.must_attach_form_2210 and "2210" not in state.forms_required:

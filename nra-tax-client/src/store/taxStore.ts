@@ -126,6 +126,7 @@ const initialResidency: IntakeResidency = {
   first_us_arrival_year: new Date().getFullYear() - 1,
   prior_us_visa_history: [],
   prior_year_residency_status: 'none',
+  is_still_in_us: true,
 };
 
 const initialIncome: IntakeIncome = {

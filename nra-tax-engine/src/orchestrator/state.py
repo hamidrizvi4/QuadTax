@@ -93,6 +93,12 @@ class TaxpayerIdentityState(BaseModel):
         description="NRA-permitted filing status. MFJ and HOH are not allowed on 1040-NR.",
     )
 
+    # Verified against every vendored TY2025 form (1040-NR, Schedule OI/A/NEC)
+    # via a full-text search for "spouse": none has a spouse name/SSN field
+    # to map these to — the 1040-NR's only "Spouse" label is a date-of-death
+    # box, not an identification line. Kept for forward-compatibility (e.g.
+    # a future MFJ-adjacent form) rather than removed; deliberately not
+    # wired to any populator since no real target exists today.
     spouse_first_name: str = Field(default="")
     spouse_last_name: str = Field(default="")
     spouse_ssn_or_itin: str = Field(default="")
@@ -180,11 +186,48 @@ class ResidencyState(BaseModel):
     prior_year_residency_status: Literal["nonresident_alien", "resident_alien", "none"] = Field(
         default="none",
         description=(
-            "Filer-reported residency status for the immediately preceding tax "
-            "year, from intake — used only for Schedule OI Item E disclosure "
-            "('were you a US resident in a prior year?'). Does NOT drive "
-            "dual-status detection or SPT computation."
+            "Filer-reported residency status for the immediately preceding "
+            "tax year, from intake. Drives Schedule OI Item E disclosure "
+            "('were you a US resident in a prior year?') AND, when set to "
+            "'resident_alien', L1's prior_visa_was_resident input to "
+            "departure-year dual-status detection."
         ),
+    )
+
+    # ── Dual-status detection inputs (intake-seeded) ───────────────────
+    first_us_entry_date: Optional[str] = Field(
+        default=None,
+        description=(
+            "ISO date of the filer's first-ever US entry, from intake. Only "
+            "used by L1 for arrival-year dual-status detection when "
+            "first_us_arrival_year == tax_year."
+        ),
+    )
+    is_still_in_us: bool = Field(
+        default=True,
+        description="False if the filer left the US before the end of the tax year.",
+    )
+    intended_departure_date: Optional[str] = Field(
+        default=None,
+        description="ISO date the filer left the US, when is_still_in_us is False.",
+    )
+
+    # ── Dual-status detection outputs (L1-computed) ────────────────────
+    is_dual_status: bool = Field(
+        default=False,
+        description="True when L1 detected an arrival-year or departure-year residency change.",
+    )
+    residency_start_date: Optional[str] = Field(
+        default=None,
+        description="Arrival-year dual status: the date NRA-to-RA residency began.",
+    )
+    residency_end_date: Optional[str] = Field(
+        default=None,
+        description="Departure-year dual status: the date RA-to-NRA residency ended.",
+    )
+    dual_status_reason: Optional[str] = Field(
+        default=None,
+        description="Plain-English citation explaining which dual-status trigger applied.",
     )
 
     years_in_exempt_status: int = Field(

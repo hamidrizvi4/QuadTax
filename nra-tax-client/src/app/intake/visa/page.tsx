@@ -30,6 +30,12 @@ export default function VisaPage() {
       first_us_arrival_year: visaDetails.firstUsEntryDate
         ? parseInt(visaDetails.firstUsEntryDate.slice(0, 4))
         : new Date().getFullYear() - 1,
+      // Dual-status detection: only meaningful to the engine when this is
+      // genuinely the filer's first-ever year in the US, or when they've
+      // already left — otherwise these ride along unused, which is fine.
+      first_us_entry_date: visaDetails.firstUsEntryDate || undefined,
+      is_still_in_us: visaDetails.isStillInUs ?? true,
+      intended_departure_date: visaDetails.intendedDepartureDate || undefined,
     });
     router.push('/intake/documents');
   };

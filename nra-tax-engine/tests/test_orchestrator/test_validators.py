@@ -33,6 +33,16 @@ class TestPostL1:
         validate_post_l1(state)
         assert state.requires_human_review == []
 
+    def test_resident_alien_status_flagged(self):
+        """A resident-alien classification (exempt window expired, or SPT
+        independently met) needs Form 1040, not the 1040-NR this engine
+        generates — must route to human review, not silently assemble the
+        wrong form."""
+        state = ReturnStateObject()
+        state.residency.status = "resident_alien"
+        validate_post_l1(state)
+        assert any("resident alien" in r for r in state.requires_human_review)
+
     def test_6013g_election_flagged(self):
         state = ReturnStateObject()
         state.elections.section_6013g_election = True

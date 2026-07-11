@@ -119,6 +119,16 @@ class TestForm1040NR:
         assert m["line_35b_routing_number"] == ""
         assert m["line_35c_account_type_checking"] is False
         assert m["line_35d_account_number"] == ""
+        # Digital assets defaults to No.
+        assert m["digital_assets_yes"] is False
+        assert m["digital_assets_no"] is True
+
+    def test_digital_assets_yes_when_extras_flag_set(self):
+        state = _build_china_art20c_state()
+        state.extras.had_digital_assets = True
+        m = compute("1040-NR", state)
+        assert m["digital_assets_yes"] is True
+        assert m["digital_assets_no"] is False
 
     def test_direct_deposit_fills_banking_lines(self):
         state = _build_china_art20c_state()

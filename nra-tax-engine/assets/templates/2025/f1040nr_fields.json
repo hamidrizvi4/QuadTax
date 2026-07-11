@@ -13,6 +13,8 @@
   "filing_status_single": "topmostSubform[0].Page1[0].c1_5[0]",
   "filing_status_mfs": "topmostSubform[0].Page1[0].c1_5[1]",
   "filing_status_qss": "topmostSubform[0].Page1[0].c1_5[2]",
+  "digital_assets_yes": "topmostSubform[0].Page1[0].c1_6[0]",
+  "digital_assets_no": "topmostSubform[0].Page1[0].c1_6[1]",
   "line_1a_wages": "topmostSubform[0].Page1[0].f1_42[0]",
   "line_1k_treaty_exempt_wages": "topmostSubform[0].Page1[0].Line1k_ReadOrder[0].f1_53[0]",
   "line_1z_total_wages_net": "topmostSubform[0].Page1[0].f1_54[0]",

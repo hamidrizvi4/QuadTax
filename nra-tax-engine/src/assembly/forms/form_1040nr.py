@@ -72,6 +72,9 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "filing_status_single": True if ident.filing_status == "single" else False,
         "filing_status_mfs": True if ident.filing_status == "mfs" else False,
         "filing_status_qss": True if ident.filing_status == "qss" else False,
+        # Digital Assets question (top of page 1) — from the intake extras step.
+        "digital_assets_yes": state.extras.had_digital_assets,
+        "digital_assets_no": not state.extras.had_digital_assets,
         # Line 1a — total W-2 wages
         "line_1a_wages": _fmt_money(income.total_w2_wages),
         # Line 1k — treaty-exempt wages subtotal (sum across all wage-category benefits)

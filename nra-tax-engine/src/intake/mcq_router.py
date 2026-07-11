@@ -69,6 +69,10 @@ class MCQRouter:
         state.residency.prior_year_residency_status = (
             payload.residency.prior_year_residency_status
         )
+        # Dual-status detection inputs — see ResidencyState's docstrings.
+        state.residency.first_us_entry_date = payload.residency.first_us_entry_date
+        state.residency.is_still_in_us = payload.residency.is_still_in_us
+        state.residency.intended_departure_date = payload.residency.intended_departure_date
 
         # Employer identification for Form 843 / 8316 / IT-203-B. Layer 3
         # (income) does not derive this from W-2 OCR text, so it must come

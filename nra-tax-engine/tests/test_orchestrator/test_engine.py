@@ -88,3 +88,29 @@ class TestPhase3AMTInput:
         # amti (with 0 preference items in this fixture) before the
         # exemption is subtracted, so it's directly observable on state.amt.
         assert state.amt["amti"] == 30_000.0
+
+
+class TestPhase3EstimatedTaxPenaltyInput:
+    """Regression test: total_withholding_credits (which includes estimated
+    payments lumped in) was passed as a single 'withholding' figure to the
+    old flat-stub penalty evaluator. The real quarterly calculation needs
+    withholding (spread evenly) and estimated payments (credited to the
+    final period) split apart, sourced from withholding_report."""
+
+    def test_estimated_payments_split_from_withholding(self):
+        engine = TaxEngine()
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.filing_status = "single"
+        state.tax.total_tax_liability = 10_000.0
+        state.tax.total_withholding_credits = 6_000.0
+        state.withholding_report = {"federal_estimated_payments": 4_000.0}
+
+        engine._compute_phase3_addons(state)
+
+        periods = state.estimated_tax_penalty["periods"]
+        assert len(periods) == 4
+        # Withholding-only portion (6000 - 4000 = 2000) spread evenly means
+        # each period is credited 500 from withholding; the estimated 4000
+        # should show up entirely in the final period's payment_credited.
+        assert periods[0]["payment_credited"] == 500.0
+        assert periods[-1]["payment_credited"] == 500.0 + 4_000.0
