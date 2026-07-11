@@ -179,15 +179,10 @@ class TaxEngine:
 
     def _compute_phase3_addons(self, state: ReturnStateObject) -> None:
         """Run AMT, ITIN, and estimated-tax-penalty evaluations and mutate state."""
-        # AMT — taxable income approximated as eci_taxable_total − exempt; this
-        # is a sound first-pass for student returns. A future revision will use
-        # the precise Form 1040-NR line 15 figure once the populator emits it.
-        taxable = max(
-            0.0,
-            float(state.income.eci_taxable_total) - float(state.treaty.exempt_amount_applied),
-        )
+        # AMT input: use the authoritative Form 1040-NR line 15 taxable income
+        # (computed by L6 and stored on state.tax) rather than approximating it.
         amt = AMTCalculator(tax_year=state.tax_year).compute(
-            taxable_income=taxable,
+            taxable_income=float(state.tax.taxable_income),
             regular_tax=float(state.tax.eci_tax_liability),
             filing_status=state.identity.filing_status,
         )

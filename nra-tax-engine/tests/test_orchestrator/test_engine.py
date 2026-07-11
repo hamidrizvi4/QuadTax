@@ -63,3 +63,28 @@ class TestTaxReturnEngine:
     def test_required_for_assembly_includes_l4(self):
         """Regression: L4 must be among the required-for-assembly layers."""
         assert "L4" in REQUIRED_LAYERS_FOR_ASSEMBLY
+
+
+class TestPhase3AMTInput:
+    """Regression test: AMT input previously approximated taxable income as
+    eci_taxable_total - exempt_amount_applied instead of using the
+    authoritative state.tax.taxable_income (available since L6 populates it
+    for the 1040-NR line-15 fix earlier this session)."""
+
+    def test_amt_uses_authoritative_taxable_income(self):
+        engine = TaxEngine()
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.filing_status = "single"
+        # Deliberately make the old approximation and the real figure
+        # disagree so the test actually distinguishes the two code paths.
+        state.income.eci_taxable_total = 999_999.0
+        state.treaty.exempt_amount_applied = 0.0
+        state.tax.taxable_income = 30_000.0
+        state.tax.eci_tax_liability = 2_000.0
+
+        engine._compute_phase3_addons(state)
+
+        # AMTCalculator.compute()'s taxable_income input flows straight into
+        # amti (with 0 preference items in this fixture) before the
+        # exemption is subtracted, so it's directly observable on state.amt.
+        assert state.amt["amti"] == 30_000.0

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useTaxStore } from '@/store/taxStore';
+import { useTaxStore, type VisaDetails } from '@/store/taxStore';
 import { ChevronRight, Plane } from 'lucide-react';
 import { FormField, inputCls, selectCls } from '@/components/FormField';
 import { CountrySelect } from '@/components/CountrySelect';
@@ -12,6 +12,8 @@ export default function VisaPage() {
   const router = useRouter();
   const { visaDetails, updateVisaDetails, updateIdentity, updateResidency } = useTaxStore();
 
+  const isJ1 = visaDetails.visaType === 'J-1';
+
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
     updateIdentity({
@@ -20,6 +22,11 @@ export default function VisaPage() {
     });
     updateResidency({
       visa_type: visaDetails.visaType,
+      // J-1 teacher/researcher gets a 2-year SPT exempt window instead of
+      // the 5-year student window — visa_type alone can't distinguish the
+      // two categories, so this rides in the dedicated subtype field
+      // instead of being encoded into visa_type itself.
+      visa_subtype: isJ1 ? visaDetails.visaSubtype : 'student',
       first_us_arrival_year: visaDetails.firstUsEntryDate
         ? parseInt(visaDetails.firstUsEntryDate.slice(0, 4))
         : new Date().getFullYear() - 1,
@@ -43,13 +50,34 @@ export default function VisaPage() {
           <select className={selectCls} value={visaDetails.visaType}
             onChange={(e) => updateVisaDetails({ visaType: e.target.value })} required>
             <option value="F-1">F-1 — Student</option>
-            <option value="J-1">J-1 — Exchange Visitor (Student)</option>
-            <option value="J-1-R">J-1 — Exchange Visitor (Researcher/Teacher)</option>
+            <option value="J-1">J-1 — Exchange Visitor</option>
             <option value="M-1">M-1 — Vocational Student</option>
             <option value="Q-1">Q-1 — Cultural Exchange</option>
             <option value="H-1B">H-1B — Specialty Occupation</option>
           </select>
         </FormField>
+
+        {isJ1 && (
+          <FormField
+            label="J-1 Category"
+            hint="Researchers/teachers get a 2-year exempt window instead of the 5-year student window — this changes your residency determination."
+            required
+          >
+            <select
+              className={selectCls}
+              value={visaDetails.visaSubtype}
+              onChange={(e) =>
+                updateVisaDetails({
+                  visaSubtype: e.target.value as VisaDetails['visaSubtype'],
+                })
+              }
+              required
+            >
+              <option value="student">Student</option>
+              <option value="teacher_researcher">Researcher / Teacher</option>
+            </select>
+          </FormField>
+        )}
 
         <div className="border border-slate-200 rounded-2xl p-4 bg-white space-y-4">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">

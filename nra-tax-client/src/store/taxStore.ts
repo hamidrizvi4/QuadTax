@@ -38,6 +38,7 @@ export interface TravelEntry {
 
 export interface VisaDetails {
   visaType: string;
+  visaSubtype: NonNullable<IntakeResidency['visa_subtype']>;
   visaIssueDate: string;
   visaExpiryDate: string;
   programStartDate: string;
@@ -180,6 +181,7 @@ const initialEligibility: EligibilityAnswers = {
 
 const initialVisaDetails: VisaDetails = {
   visaType: 'F-1',
+  visaSubtype: 'student',
   visaIssueDate: '',
   visaExpiryDate: '',
   programStartDate: '',
@@ -373,6 +375,7 @@ export const useTaxStore = create<TaxState>()(
 
       buildIntakePayload: () => {
         const s = get();
+        const ex = s.extras;
         return {
           identity: s.identity,
           residency: s.residency,
@@ -381,6 +384,25 @@ export const useTaxStore = create<TaxState>()(
           fica: s.fica,
           banking: s.banking,
           elections: s.elections,
+          // Tri-state (boolean | null) on the frontend collapses to a plain
+          // bool for the backend — null ("not yet answered") maps to false,
+          // matching how every other optional intake toggle in this app
+          // already defaults when left untouched.
+          extras: {
+            is_full_time_student: ex.isFullTimeStudent ?? false,
+            is_degree_candidate: ex.isDegreeCandidate ?? false,
+            is_opt_cpt: ex.isOptCpt ?? false,
+            had_digital_assets: ex.hadDigitalAssets ?? false,
+            can_be_claimed_as_dependent: ex.canBeClaimedAsDependent ?? false,
+            was_married_on_last_day: ex.wasMarriedOnLastDay ?? false,
+            made_estimated_federal_payments: ex.madeEstimatedFederalPayments ?? false,
+            estimated_federal_payment_amount: ex.estimatedFederalPaymentAmount,
+            made_estimated_state_payments: ex.madeEstimatedStatePayments ?? false,
+            filed_federal_extension: ex.filedFederalExtension ?? false,
+            filed_previous_federal_return: ex.filedPreviousFederalReturn ?? false,
+            previous_return_year: ex.previousReturnYear,
+            previous_return_type: ex.previousReturnType,
+          },
         };
       },
 

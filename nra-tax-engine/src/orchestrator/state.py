@@ -167,6 +167,25 @@ class ResidencyState(BaseModel):
             "no exempt visa applies."
         ),
     )
+    visa_subtype: Literal["student", "teacher_researcher", "trainee", "other"] = Field(
+        default="student",
+        description=(
+            "Distinguishes a J-1 teacher/researcher (2-calendar-year exempt "
+            "window) from a J-1 student (5-calendar-year window) — the two "
+            "share the same visa_type='J-1' but have different SPT exemption "
+            "periods under IRC §7701(b)(5). Only meaningful for J-1; F-1/M-1/Q-1 "
+            "always use the 5-year student window regardless of this value."
+        ),
+    )
+    prior_year_residency_status: Literal["nonresident_alien", "resident_alien", "none"] = Field(
+        default="none",
+        description=(
+            "Filer-reported residency status for the immediately preceding tax "
+            "year, from intake — used only for Schedule OI Item E disclosure "
+            "('were you a US resident in a prior year?'). Does NOT drive "
+            "dual-status detection or SPT computation."
+        ),
+    )
 
     years_in_exempt_status: int = Field(
         default=0,
@@ -373,6 +392,17 @@ class TreatyState(BaseModel):
             "Notice 2010-21 exception. Drives forms_required population."
         ),
     )
+    prior_year_treaty_claim_total: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Filer-reported treaty-exempt amount claimed in the prior tax "
+            "year, from intake — display-only, for Schedule OI Item L's "
+            "'amount claimed in prior years' column. Does not affect the "
+            "current year's exemption math (treaty caps are applied fresh "
+            "per tax year)."
+        ),
+    )
 
 
 class FicaState(BaseModel):
@@ -426,6 +456,20 @@ class FicaState(BaseModel):
             "The employer must first refuse to issue the refund directly."
         ),
     )
+    employer_attempted_refund: bool = Field(
+        default=False,
+        description=(
+            "Filer-confirmed: they asked their employer for a FICA refund. "
+            "Treas. Reg. §31.3121(b)(19)-1 requires this before Form 843 is "
+            "proper. Drives whether Form 843/8316's explanation text can "
+            "assert employer refusal as a confirmed fact vs. an unconfirmed "
+            "claim."
+        ),
+    )
+    has_form_8316: bool = Field(
+        default=False,
+        description="Filer-confirmed: an employer-signed Form 8316 statement is in hand.",
+    )
 
 
 class NYTaxState(BaseModel):
@@ -450,6 +494,18 @@ class NYTaxState(BaseModel):
     days_in_ny: int = Field(default=0, ge=0, le=366)
     nyc_resident: bool = Field(default=False)
     yonkers_resident: bool = Field(default=False)
+    ny_work_days: int = Field(
+        default=0, ge=0, le=366,
+        description="Work days spent physically in NY — IT-203-B Schedule A.",
+    )
+    total_work_days: int = Field(
+        default=0, ge=0, le=366,
+        description="Total work days for the year (NY + elsewhere) — IT-203-B Schedule A.",
+    )
+    abode_months_in_year: int = Field(
+        default=0, ge=0, le=12,
+        description="Months a NY abode was maintained — IT-203-B Schedule B.",
+    )
 
     ny_source_wages: float = Field(default=0.0, ge=0.0)
     ny_source_1042s_gross: float = Field(default=0.0, ge=0.0)
@@ -581,6 +637,17 @@ class TaxCalculatedState(BaseModel):
         ),
     )
 
+    direct_deposit: bool = Field(
+        default=False,
+        description="True if the filer requested direct deposit for their federal refund.",
+    )
+    routing_number: str = Field(default="", description="9-digit ABA routing number.")
+    account_number: str = Field(default="", description="Bank account number.")
+    account_type: Literal["checking", "savings", ""] = Field(
+        default="",
+        description="Account type for direct deposit — Form 1040-NR line 35c.",
+    )
+
 
 class ElectionsState(BaseModel):
     """Tax elections / disclosures the filer has made, seeded from intake.
@@ -588,11 +655,15 @@ class ElectionsState(BaseModel):
     None of these are supported by the deterministic NRA (§871) pipeline
     this engine implements — a §6013 election means filing as a full
     resident under §1 (worldwide income, a different tax regime entirely),
-    and large foreign gifts / the closer-connection exception each require
-    a standalone form (3520 / 8840) this engine does not generate. When any
-    of these is True, validate_post_l1 blocks automatic assembly rather
-    than silently producing a return that omits a legally required
-    disclosure or applies the wrong tax regime.
+    large foreign gifts / the closer-connection exception each require a
+    standalone form (3520 / 8840) this engine does not generate, and a
+    §871(d) election requires computing real-property income as ECI, which
+    has no supporting income category anywhere in this engine — checking
+    Schedule OI's disclosure box without that underlying computation would
+    be actively misleading, not just incomplete. When any of these is True,
+    validate_post_l1 blocks automatic assembly rather than silently
+    producing a return that omits a legally required disclosure or applies
+    the wrong tax treatment.
     """
 
     section_6013g_election: bool = Field(
@@ -603,6 +674,10 @@ class ElectionsState(BaseModel):
         default=False,
         description="§6013(h): dual-status-year election to be treated as resident.",
     )
+    section_871d_election: bool = Field(
+        default=False,
+        description="§871(d): real-property income treated as ECI — no supporting income category in this engine.",
+    )
     large_foreign_gifts_over_100k: bool = Field(
         default=False,
         description="Received gifts/bequests over $100,000 from a foreign person or estate — triggers Form 3520.",
@@ -611,6 +686,35 @@ class ElectionsState(BaseModel):
         default=False,
         description="Claiming the closer-connection-to-a-foreign-country exception — requires Form 8840.",
     )
+
+
+class ExtrasState(BaseModel):
+    """Miscellaneous intake answers seeded from the frontend's "extras" step.
+
+    Two fields have a confirmed form-line consumer today:
+    filed_previous_federal_return (Schedule OI Item H) and
+    made_estimated_federal_payments / estimated_federal_payment_amount
+    (1040-NR line 26, via withholding_reconciler). The rest land here so
+    they're captured rather than silently dropped, pending a specific form
+    requirement to consume them.
+    """
+
+    is_full_time_student: bool = False
+    is_degree_candidate: bool = False
+    is_opt_cpt: bool = False
+    had_digital_assets: bool = False
+    can_be_claimed_as_dependent: bool = False
+    was_married_on_last_day: bool = False
+    made_estimated_federal_payments: bool = False
+    estimated_federal_payment_amount: float = Field(default=0.0, ge=0.0)
+    made_estimated_state_payments: bool = False
+    filed_federal_extension: bool = False
+    filed_previous_federal_return: bool = Field(
+        default=False,
+        description="Schedule OI Item H — filed a 1040 in the prior tax year.",
+    )
+    previous_return_year: Optional[int] = None
+    previous_return_type: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -664,6 +768,10 @@ class ReturnStateObject(BaseModel):
     elections: ElectionsState = Field(
         default_factory=ElectionsState,
         description="Intake-populated tax elections/disclosures out of scope for this engine.",
+    )
+    extras: ExtrasState = Field(
+        default_factory=ExtrasState,
+        description="Miscellaneous intake answers from the frontend's extras step.",
     )
 
     # ── Pipeline-level constants ──────────────────────────────────────

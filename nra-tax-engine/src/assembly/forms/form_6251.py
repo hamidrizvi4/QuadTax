@@ -29,7 +29,7 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
     return {
         "name": f"{ident.first_name} {ident.last_name}".strip(),
         "tin": ident.primary_tin,
-        "line_1_taxable_income": _fmt_money(state.tax.eci_tax_liability),  # placeholder
+        "line_1_taxable_income": _fmt_money(state.tax.taxable_income),
         "line_4_amti": _fmt_money(amt.get("amti", 0.0)),
         "line_5_exemption": _fmt_money(amt.get("exemption", 0.0)),
         "line_7_tmt_before_credits": _fmt_money(amt.get("tentative_minimum_tax", 0.0)),

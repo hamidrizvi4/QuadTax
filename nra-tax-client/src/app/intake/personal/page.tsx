@@ -113,6 +113,30 @@ export default function PersonalPage() {
           </FormField>
         </div>
 
+        <div className="border-t border-slate-100 pt-4 space-y-3">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Passport (Optional)</p>
+          <FormField label="Passport Number" hint="Used on Form 8843, if filed.">
+            <input className={inputCls} value={identity.passport_number}
+              onChange={(e) => updateIdentity({ passport_number: e.target.value })} placeholder="EA1234567" />
+          </FormField>
+          <FormField label="Passport Country">
+            <CountrySelect value={identity.passport_country}
+              onChange={(v) => updateIdentity({ passport_country: v })} placeholder="Select passport country…" />
+          </FormField>
+        </div>
+
+        <div className="border-t border-slate-100 pt-4 space-y-3">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Contact Info (Optional)</p>
+          <FormField label="Daytime Phone">
+            <input type="tel" className={inputCls} value={identity.daytime_phone}
+              onChange={(e) => updateIdentity({ daytime_phone: e.target.value })} placeholder="212-555-0123" />
+          </FormField>
+          <FormField label="Email">
+            <input type="email" className={inputCls} value={identity.email}
+              onChange={(e) => updateIdentity({ email: e.target.value })} placeholder="you@nyu.edu" />
+          </FormField>
+        </div>
+
         <button type="submit"
           className="w-full h-14 bg-slate-900 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 hover:bg-slate-800 active:scale-95 transition-all shadow-xl">
           Continue

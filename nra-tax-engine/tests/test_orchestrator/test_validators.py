@@ -45,6 +45,12 @@ class TestPostL1:
         validate_post_l1(state)
         assert any("6013" in r for r in state.requires_human_review)
 
+    def test_871d_election_flagged(self):
+        state = ReturnStateObject()
+        state.elections.section_871d_election = True
+        validate_post_l1(state)
+        assert any("871(d)" in r for r in state.requires_human_review)
+
     def test_large_foreign_gifts_flagged(self):
         state = ReturnStateObject()
         state.elections.large_foreign_gifts_over_100k = True

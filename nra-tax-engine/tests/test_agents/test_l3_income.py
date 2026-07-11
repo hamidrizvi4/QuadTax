@@ -87,3 +87,53 @@ class TestIncomeAgent:
         assert updated_state.income.fdap_taxable_total == 5000.0
         assert updated_state.income.exempt_scholarship_total == 0.0
         assert "L3" in updated_state.completed_layers
+
+    def test_estimated_payments_from_extras_reach_withholding_report(self):
+        """Regression test: reconcile() has always accepted an
+        estimated_payments param, but nothing passed it — line 26 of the
+        1040-NR was hardcoded to 0 regardless of what the filer entered."""
+        mock_client = MagicMock()
+        w2_completion = MagicMock()
+        w2_completion.choices = [MagicMock()]
+        w2_completion.choices[0].message.parsed = W2Data(
+            box_1_wages=10000.0, box_2_fed_withholding=1000.0,
+            box_4_ss_withheld=0.0, box_6_medicare_withheld=0.0,
+        )
+        mock_client.beta.chat.completions.parse.side_effect = [w2_completion]
+
+        agent = IncomeAgent(llm_client=mock_client)
+        state = ReturnStateObject()
+        state.extras.made_estimated_federal_payments = True
+        state.extras.estimated_federal_payment_amount = 800.0
+
+        updated_state = agent.process_income(
+            w2_ocr_texts=["FAKE W-2 TEXT"],
+            form_1042s_ocr_texts=[],
+            requires_services=False,
+            is_qualified_expense=False,
+            current_state=state,
+        )
+        assert updated_state.withholding_report["federal_estimated_payments"] == 800.0
+
+    def test_no_estimated_payments_when_flag_unset(self):
+        mock_client = MagicMock()
+        w2_completion = MagicMock()
+        w2_completion.choices = [MagicMock()]
+        w2_completion.choices[0].message.parsed = W2Data(
+            box_1_wages=10000.0, box_2_fed_withholding=1000.0,
+            box_4_ss_withheld=0.0, box_6_medicare_withheld=0.0,
+        )
+        mock_client.beta.chat.completions.parse.side_effect = [w2_completion]
+
+        agent = IncomeAgent(llm_client=mock_client)
+        state = ReturnStateObject()
+        state.extras.estimated_federal_payment_amount = 800.0  # set but flag False
+
+        updated_state = agent.process_income(
+            w2_ocr_texts=["FAKE W-2 TEXT"],
+            form_1042s_ocr_texts=[],
+            requires_services=False,
+            is_qualified_expense=False,
+            current_state=state,
+        )
+        assert updated_state.withholding_report["federal_estimated_payments"] == 0.0

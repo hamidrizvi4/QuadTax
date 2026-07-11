@@ -35,11 +35,11 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "sched_A_employer_name": state.income.employer_name,
         "sched_A_employer_address": "",  # not collected separately from employer_name today
         "sched_A_total_wages_box_1": _fmt_money(state.income.total_w2_wages),
-        "sched_A_total_days": 365,  # default; intake should override
-        "sched_A_ny_workdays": 0,    # intake-derived
-        "sched_A_workdays_outside_ny": 0,  # intake-derived
+        "sched_A_total_days": 365,  # calendar constant, not intake-derived
+        "sched_A_ny_workdays": ny.ny_work_days,
+        "sched_A_workdays_outside_ny": max(0, ny.total_work_days - ny.ny_work_days),
         "sched_A_holidays": 0,
-        "sched_A_total_workdays_in_year": 0,
+        "sched_A_total_workdays_in_year": ny.total_work_days,
         "sched_A_ny_pct": (
             f"{ny.ny_income_percentage * 100:.4f}" if ny.ny_income_percentage else "0.0000"
         ),
@@ -50,6 +50,6 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "sched_B_did_you_maintain_abode_in_ny": (
             "Yes" if ny.residency_reason and "permanent abode" in ny.residency_reason else "No"
         ),
-        "sched_B_months_maintained": 0,  # intake-derived
+        "sched_B_months_maintained": ny.abode_months_in_year,
         "sched_B_days_in_ny": ny.days_in_ny,
     }

@@ -63,6 +63,16 @@ def validate_post_l1(state: "ReturnStateObject") -> List[str]:
             "under §1 (worldwide income, Form 1040, not 1040-NR). A CPA must "
             "prepare this return.",
         )
+    if elections.section_871d_election:
+        _flag(
+            state,
+            "Elections: §871(d) election in effect — filer elects to treat "
+            "real-property income as effectively connected income. This "
+            "engine has no real-property income category to compute that "
+            "treatment; checking Schedule OI's disclosure box without the "
+            "underlying computation would misrepresent the return. A CPA "
+            "must prepare this return.",
+        )
     if elections.large_foreign_gifts_over_100k:
         _flag(
             state,

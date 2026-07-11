@@ -79,6 +79,7 @@ export default function ContextPage() {
 
   const hasOutOfScopeElection =
     elections.section_6013g_election ||
+    elections.section_871d_election ||
     elections.large_foreign_gifts_over_100k ||
     elections.closer_connection_exception_claimed;
 
@@ -261,6 +262,12 @@ export default function ContextPage() {
             onChange={(v) =>
               updateElections({ section_6013g_election: v, section_6013h_election: v })
             }
+          />
+          <Toggle
+            label="Electing to treat real property income as ECI (§871(d))?"
+            sublabel="A specific election on rental/real-estate income — not the same as the treaty exemptions above."
+            value={elections.section_871d_election}
+            onChange={(v) => updateElections({ section_871d_election: v })}
           />
           <Toggle
             label="Received a gift or inheritance over $100,000 from abroad?"

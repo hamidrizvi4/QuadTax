@@ -26,6 +26,9 @@ def _fmt_birth_date(iso_date: str | None) -> str:
     return f"{month}{day}{year}"
 
 
+_REASON_LETTERS = ["a", "b", "c", "d", "e", "f", "g", "h"]
+
+
 def compute_field_map(state: "ReturnStateObject") -> dict:
     ident = state.identity
 
@@ -35,8 +38,13 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
     elif not (state.residency.exempt_visa_type or "").startswith(("F", "J", "M", "Q")):
         reason_code = "b"  # NRA filing a US tax return (generic)
 
+    is_renewal = bool((state.itin_eligibility or {}).get("is_renewal", False))
+
     return {
-        "reason_code": reason_code,
+        "reason_code": reason_code,  # kept for any consumer reading the raw letter
+        **{f"reason_{letter}": (letter == reason_code) for letter in _REASON_LETTERS},
+        "application_type_new": not is_renewal,
+        "application_type_renewal": is_renewal,
         "name_line1": f"{ident.first_name} {ident.last_name}".strip(),
         "name_at_birth": f"{ident.first_name} {ident.last_name}".strip(),
         "mailing_address_line1": ident.us_address_line1,

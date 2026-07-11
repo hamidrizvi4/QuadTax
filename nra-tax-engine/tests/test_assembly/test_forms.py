@@ -28,6 +28,9 @@ def _build_china_art20c_state() -> ReturnStateObject:
     state.residency.exempt_visa_type = "F-1"
     state.residency.years_in_exempt_status = 2
     state.residency.spt_days_current_year = 300
+    state.residency.days_present_current_year = 300
+    state.residency.days_present_year_minus_1 = 365
+    state.residency.days_present_year_minus_2 = 0
     state.residency.is_exempt_individual = True
 
     state.income.total_w2_wages = 30000.0
@@ -112,6 +115,30 @@ class TestForm1040NR:
         # Filing status checkboxes
         assert m["filing_status_single"] is True
         assert m["filing_status_mfs"] is False
+        # Direct deposit not requested by default -> banking lines blank.
+        assert m["line_35b_routing_number"] == ""
+        assert m["line_35c_account_type_checking"] is False
+        assert m["line_35d_account_number"] == ""
+
+    def test_direct_deposit_fills_banking_lines(self):
+        state = _build_china_art20c_state()
+        state.tax.direct_deposit = True
+        state.tax.routing_number = "021000021"
+        state.tax.account_number = "000123456789"
+        state.tax.account_type = "checking"
+        m = compute("1040-NR", state)
+        assert m["line_35b_routing_number"] == "021000021"
+        assert m["line_35d_account_number"] == "000123456789"
+        assert m["line_35c_account_type_checking"] is True
+        assert m["line_35c_account_type_savings"] is False
+
+    def test_direct_deposit_savings_account(self):
+        state = _build_china_art20c_state()
+        state.tax.direct_deposit = True
+        state.tax.account_type = "savings"
+        m = compute("1040-NR", state)
+        assert m["line_35c_account_type_checking"] is False
+        assert m["line_35c_account_type_savings"] is True
 
 
 class TestScheduleOI:
@@ -126,6 +153,41 @@ class TestScheduleOI:
         assert m["item_A_country_citizenship"] == "CN"
         assert m["item_C_visa_type"] == "F-1"
         assert m["item_G_days_current_year"] == 300
+        assert m["item_G_days_year_minus_1"] == 365
+        assert m["item_G_days_year_minus_2"] == 0
+
+    def test_item_h_reflects_extras_filed_previous_return(self):
+        state = _build_china_art20c_state()
+        state.extras.filed_previous_federal_return = True
+        m = compute("Schedule-OI", state)
+        assert m["item_H_filed_1040_prior_year"] is True
+
+    def test_elections_reflected_when_force_assembled(self):
+        """Items I/K/M mirror state.elections — only reachable in practice
+        via force_assembly=True since the human-review gate blocks assembly
+        whenever any of these is set."""
+        state = _build_china_art20c_state()
+        state.elections.section_6013g_election = True
+        state.elections.section_871d_election = True
+        state.elections.large_foreign_gifts_over_100k = True
+        state.elections.closer_connection_exception_claimed = True
+        m = compute("Schedule-OI", state)
+        assert m["item_I_6013_election"] is True
+        assert m["item_J_871d_election"] is True
+        assert m["item_K_large_foreign_gifts"] is True
+        assert m["item_M_closer_connection"] is True
+
+    def test_prior_year_treaty_claim_on_first_row(self):
+        state = _build_china_art20c_state()
+        state.treaty.prior_year_treaty_claim_total = 4500.0
+        m = compute("Schedule-OI", state)
+        assert m["item_L_treaty_rows"][0]["amount_prior_years"] == 4500.0
+
+    def test_prior_year_resident_status_reflected(self):
+        state = _build_china_art20c_state()
+        state.residency.prior_year_residency_status = "resident_alien"
+        m = compute("Schedule-OI", state)
+        assert m["item_E_prior_year_resident"] is True
 
 
 class TestScheduleNEC:
@@ -233,6 +295,32 @@ class TestForm843:
         assert "§3121(b)(19)" in m["line_4_explanation_irc_section"]
         assert "F-1" in m["line_7_explanation_text"]
 
+    def test_explanation_does_not_assert_unconfirmed_employer_refusal(self):
+        """Without employer_attempted_refund confirmed, the explanation must
+        not claim the employer was asked — that would misstate a fact on a
+        document filed under penalty of perjury."""
+        state = _build_china_art20c_state()
+        state.fica.employer_attempted_refund = False
+        state.fica.has_form_8316 = False
+        m = compute("843", state)
+        text = m["line_7_explanation_text"]
+        assert "requested a refund from the employer and did not receive" not in text
+        assert "should request a refund from the employer" in text
+
+    def test_explanation_reflects_confirmed_employer_attempt(self):
+        state = _build_china_art20c_state()
+        state.fica.employer_attempted_refund = True
+        state.fica.has_form_8316 = False
+        m = compute("843", state)
+        assert "requested a refund from the employer and did not receive" in m["line_7_explanation_text"]
+
+    def test_explanation_reflects_employer_written_statement(self):
+        state = _build_china_art20c_state()
+        state.fica.employer_attempted_refund = True
+        state.fica.has_form_8316 = True
+        m = compute("843", state)
+        assert "confirmed in writing that it will not issue a refund" in m["line_7_explanation_text"]
+
 
 class TestFormW7:
     def test_reason_code_a_when_treaty_claim(self):
@@ -241,6 +329,28 @@ class TestFormW7:
         assert m["reason_code"] == "a"
         assert m["passport_number"] == "E12345678"
         assert m["treaty_country_when_reason_a"] == "CN"
+        # Exactly one of the 8 reason checkboxes should be True.
+        assert m["reason_a"] is True
+        for letter in "bcdefgh":
+            assert m[f"reason_{letter}"] is False
+        assert m["application_type_new"] is True
+        assert m["application_type_renewal"] is False
+
+    def test_reason_code_f_default_checks_only_f(self):
+        state = _build_china_art20c_state()
+        state.treaty.applied_benefits = []  # no 8833 requirement -> falls to default "f"
+        m = compute("W-7", state)
+        assert m["reason_code"] == "f"
+        assert m["reason_f"] is True
+        for letter in "abcdegh":
+            assert m[f"reason_{letter}"] is False
+
+    def test_renewal_flag_reflects_itin_eligibility(self):
+        state = _build_china_art20c_state()
+        state.itin_eligibility = {"is_renewal": True}
+        m = compute("W-7", state)
+        assert m["application_type_new"] is False
+        assert m["application_type_renewal"] is True
 
 
 class TestForm6251:
@@ -249,6 +359,16 @@ class TestForm6251:
         m = compute("6251", state)
         assert m["line_11_amt_owed"] == ""
         assert m["_binds"] is False
+
+    def test_line_1_uses_taxable_income_not_tax_liability(self):
+        """Regression test: line 1 was reading eci_tax_liability (a computed
+        tax dollar amount) instead of taxable_income — the author's own
+        '# placeholder' comment confirmed this was known-wrong."""
+        state = _build_china_art20c_state()
+        state.tax.taxable_income = 25000.0
+        state.tax.eci_tax_liability = 2762.0  # deliberately different
+        m = compute("6251", state)
+        assert m["line_1_taxable_income"] == "25000"
 
 
 class TestForm2210:
@@ -348,3 +468,27 @@ class TestIndiaForm1040NR:
         assert m["count"] == 1
         assert m["rows"][0]["box_2_treaty_country"] == "India"
         assert m["rows"][0]["box_3_treaty_article"] == "21(2)"
+
+
+class TestFormIT203B:
+    def test_workday_and_abode_fields_reflect_real_ny_state(self):
+        """Regression test: these were hardcoded to 0/365 regardless of
+        intake — NYAgent computes real allocation math from ny_work_days/
+        total_work_days/abode_months_in_year but never wrote them back onto
+        NYTaxState, so the form that displays them had nothing to read."""
+        state = _build_china_art20c_state()
+        state.ny.ny_work_days = 180
+        state.ny.total_work_days = 200
+        state.ny.abode_months_in_year = 9
+        m = compute("IT-203-B", state)
+        assert m["sched_A_ny_workdays"] == 180
+        assert m["sched_A_total_workdays_in_year"] == 200
+        assert m["sched_A_workdays_outside_ny"] == 20
+        assert m["sched_B_months_maintained"] == 9
+
+    def test_workday_outside_ny_never_negative(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_work_days = 50
+        state.ny.total_work_days = 0  # not yet populated
+        m = compute("IT-203-B", state)
+        assert m["sched_A_workdays_outside_ny"] == 0

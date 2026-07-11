@@ -177,6 +177,29 @@ class IntakeElections(BaseModel):
     closer_connection_exception_claimed: bool = False
 
 
+class IntakeExtras(BaseModel):
+    """Miscellaneous intake answers from the frontend's "extras" step."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    is_full_time_student: bool = False
+    is_degree_candidate: bool = False
+    is_opt_cpt: bool = False
+    had_digital_assets: bool = False
+    can_be_claimed_as_dependent: bool = False
+    was_married_on_last_day: bool = False
+    made_estimated_federal_payments: bool = False
+    estimated_federal_payment_amount: float = Field(default=0.0, ge=0.0)
+    made_estimated_state_payments: bool = False
+    filed_federal_extension: bool = False
+    filed_previous_federal_return: bool = Field(
+        default=False,
+        description="Schedule OI Item H — filed a 1040 in the prior tax year.",
+    )
+    previous_return_year: Optional[int] = None
+    previous_return_type: str = ""
+
+
 class IntakePayload(BaseModel):
     """Top-level intake payload — POSTed to /api/v1/submit."""
 
@@ -192,3 +215,4 @@ class IntakePayload(BaseModel):
     fica: IntakeFICA = Field(default_factory=IntakeFICA)
     banking: IntakeBanking = Field(default_factory=IntakeBanking)
     elections: IntakeElections = Field(default_factory=IntakeElections)
+    extras: IntakeExtras = Field(default_factory=IntakeExtras)

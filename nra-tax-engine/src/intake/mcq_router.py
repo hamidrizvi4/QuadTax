@@ -60,8 +60,15 @@ class MCQRouter:
         ident.spouse_ssn_or_itin = p.spouse_ssn_or_itin
 
         # Residency seed — the L1 agent will overwrite status / day counts
-        # but the visa_type and arrival year come from intake.
+        # but the visa_type, subtype, and arrival year come from intake.
+        # visa_subtype specifically distinguishes a J-1 teacher/researcher
+        # (2-year exempt window) from a J-1 student (5-year window) — L1
+        # reads this to pick the right window.
         state.residency.exempt_visa_type = payload.residency.visa_type
+        state.residency.visa_subtype = payload.residency.visa_subtype
+        state.residency.prior_year_residency_status = (
+            payload.residency.prior_year_residency_status
+        )
 
         # Employer identification for Form 843 / 8316 / IT-203-B. Layer 3
         # (income) does not derive this from W-2 OCR text, so it must come
@@ -69,16 +76,51 @@ class MCQRouter:
         state.income.employer_name = payload.fica.employer_name
         state.income.employer_ein = payload.fica.employer_ein
 
+        # Whether the filer actually confirmed asking their employer for a
+        # FICA refund — Form 843/8316's explanation text uses this to avoid
+        # asserting employer refusal as fact when it hasn't been confirmed.
+        state.fica.employer_attempted_refund = payload.fica.employer_attempted_refund
+        state.fica.has_form_8316 = payload.fica.has_form_8316
+
+        # Prior-year treaty claim, for Schedule OI Item L display only.
+        state.treaty.prior_year_treaty_claim_total = (
+            payload.income.prior_year_treaty_claim_total
+        )
+
+        # Direct deposit — Form 1040-NR line 35b/c/d.
+        state.tax.direct_deposit = payload.banking.direct_deposit
+        state.tax.routing_number = payload.banking.routing_number
+        state.tax.account_number = payload.banking.account_number
+        state.tax.account_type = payload.banking.account_type
+
         # Elections/disclosures out of scope for this engine's NRA (§871)
         # pipeline. validate_post_l1 blocks assembly when any is set.
         state.elections.section_6013g_election = payload.elections.section_6013g_election
         state.elections.section_6013h_election = payload.elections.section_6013h_election
+        state.elections.section_871d_election = payload.elections.section_871d_election
         state.elections.large_foreign_gifts_over_100k = (
             payload.elections.large_foreign_gifts_over_100k
         )
         state.elections.closer_connection_exception_claimed = (
             payload.elections.closer_connection_exception_claimed
         )
+
+        # Extras — captured on state even where no form line consumes them
+        # yet, so answered questions are never silently dropped.
+        e = payload.extras
+        state.extras.is_full_time_student = e.is_full_time_student
+        state.extras.is_degree_candidate = e.is_degree_candidate
+        state.extras.is_opt_cpt = e.is_opt_cpt
+        state.extras.had_digital_assets = e.had_digital_assets
+        state.extras.can_be_claimed_as_dependent = e.can_be_claimed_as_dependent
+        state.extras.was_married_on_last_day = e.was_married_on_last_day
+        state.extras.made_estimated_federal_payments = e.made_estimated_federal_payments
+        state.extras.estimated_federal_payment_amount = e.estimated_federal_payment_amount
+        state.extras.made_estimated_state_payments = e.made_estimated_state_payments
+        state.extras.filed_federal_extension = e.filed_federal_extension
+        state.extras.filed_previous_federal_return = e.filed_previous_federal_return
+        state.extras.previous_return_year = e.previous_return_year
+        state.extras.previous_return_type = e.previous_return_type
 
         return state
 

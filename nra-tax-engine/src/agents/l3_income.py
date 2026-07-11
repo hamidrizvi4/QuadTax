@@ -194,6 +194,11 @@ class IncomeAgent:
                 )
                 for e in parsed_1099s
             ],
+            estimated_payments=(
+                [current_state.extras.estimated_federal_payment_amount]
+                if current_state.extras.made_estimated_federal_payments
+                else []
+            ),
         )
 
         # --- State mutation ----------------------------------------------
