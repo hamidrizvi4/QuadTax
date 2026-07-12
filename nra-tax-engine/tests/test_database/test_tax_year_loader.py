@@ -47,6 +47,26 @@ class TestLoadYear2025:
         sd = self.year.standard_deduction
         assert sd.for_status("single", india_treaty=True) == 15000.0
 
+    def test_dependent_deduction_capped_at_minimum_when_no_earned_income(self):
+        """IRC §63(c)(5): with no earned income, a dependent's deduction is
+        the fixed minimum, far below the regular $15,000 amount."""
+        sd = self.year.standard_deduction
+        amount = sd.for_dependent("single", earned_income=0.0, india_treaty=True)
+        assert amount == 1350.0
+
+    def test_dependent_deduction_uses_earned_income_plus_addon_when_higher(self):
+        sd = self.year.standard_deduction
+        # 5000 + 450 = 5450, which is more than the 1350 floor.
+        amount = sd.for_dependent("single", earned_income=5000.0, india_treaty=True)
+        assert amount == 5450.0
+
+    def test_dependent_deduction_never_exceeds_regular_amount(self):
+        """A dependent with very high earned income still can't exceed the
+        regular (non-dependent) standard deduction for their status."""
+        sd = self.year.standard_deduction
+        amount = sd.for_dependent("single", earned_income=100_000.0, india_treaty=True)
+        assert amount == 15000.0  # capped at the regular single amount
+
     def test_fica_wage_base_and_rates(self):
         ss = self.year.fica.social_security
         assert ss["wage_base"] == 176100

@@ -43,6 +43,27 @@ class TestPostL1:
         validate_post_l1(state)
         assert any("resident alien" in r for r in state.requires_human_review)
 
+    def test_married_but_filing_single_flagged(self):
+        state = ReturnStateObject()
+        state.extras.was_married_on_last_day = True
+        state.identity.filing_status = "single"
+        validate_post_l1(state)
+        assert any("married" in r.lower() for r in state.requires_human_review)
+
+    def test_married_filing_mfs_not_flagged(self):
+        state = ReturnStateObject()
+        state.extras.was_married_on_last_day = True
+        state.identity.filing_status = "mfs"
+        validate_post_l1(state)
+        assert state.requires_human_review == []
+
+    def test_not_married_filing_single_not_flagged(self):
+        state = ReturnStateObject()
+        state.extras.was_married_on_last_day = False
+        state.identity.filing_status = "single"
+        validate_post_l1(state)
+        assert state.requires_human_review == []
+
     def test_6013g_election_flagged(self):
         state = ReturnStateObject()
         state.elections.section_6013g_election = True

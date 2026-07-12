@@ -15,7 +15,10 @@
     "nra_india_treaty_amount_by_status": {
       "single": 15000,
       "mfs": 15000
-    }
+    },
+    "dependent_note": "IRC §63(c)(5): a filer who can be claimed as another taxpayer's dependent has their standard deduction capped at the GREATER of dependent_minimum or (earned income + dependent_earned_income_addon), never exceeding the regular amount above. Verify against IRS Rev. Proc. 2024-40 §3.13 directly before relying on this for a real filing — reconstructed from the same indexing pattern as the other TY2025 figures in this file, not independently re-verified.",
+    "dependent_minimum": 1350,
+    "dependent_earned_income_addon": 450
   },
   "additional_amounts": {
     "_note": "Additional standard deduction for age 65+ or blind. Most NRA students are <65 and not blind; included for completeness.",

@@ -52,6 +52,15 @@ def validate_post_l1(state: "ReturnStateObject") -> List[str]:
             "QuadTax computes the NRA portion only. A CPA must verify the "
             "resident-alien portion separately (Form 1040 + Form 1040-NR).",
         )
+    if state.extras.was_married_on_last_day and state.identity.filing_status == "single":
+        _flag(
+            state,
+            "Extras: filer reported being married on the last day of the "
+            "tax year, but filing_status is 'single' — a married NRA must "
+            "file as MFS (or, rarely, QSS), never single. Verify the "
+            "correct filing status before assembly; using the wrong one "
+            "changes the tax brackets and thresholds applied.",
+        )
     if residency.status == "resident_alien":
         _flag(
             state,

@@ -734,12 +734,40 @@ class ElectionsState(BaseModel):
 class ExtrasState(BaseModel):
     """Miscellaneous intake answers seeded from the frontend's "extras" step.
 
-    Two fields have a confirmed form-line consumer today:
-    filed_previous_federal_return (Schedule OI Item H) and
-    made_estimated_federal_payments / estimated_federal_payment_amount
-    (1040-NR line 26, via withholding_reconciler). The rest land here so
-    they're captured rather than silently dropped, pending a specific form
-    requirement to consume them.
+    Consumer status per field, verified by a full-text search of every
+    vendored TY2025 form (1040-NR, Schedule OI/A/NEC, 8843, 843) for
+    "full-time"/"degree candidate"/"dependent"/"extension"/"OPT"/"CPT" —
+    none of those strings appear anywhere, so several of these genuinely
+    have no PDF field to map to, not just an unwired one:
+
+    - filed_previous_federal_return -> Schedule OI Item H.
+    - made_estimated_federal_payments / estimated_federal_payment_amount ->
+      1040-NR line 26, via withholding_reconciler.
+    - can_be_claimed_as_dependent -> gates the IRC §63(c)(5) capped
+      standard deduction for India Article 21(2) filers (l6_tax_calc.py) —
+      a real computational input, not just a display field. Defaults to
+      False, matching prior (uncapped) behavior when unanswered, so this
+      only ever makes the computed deduction smaller/more conservative
+      relative to before, never larger.
+    - was_married_on_last_day -> validate_post_l1 flags an inconsistency
+      when set True alongside filing_status="single" (a married NRA must
+      file MFS, never single) — a data-quality check, not a form field.
+    - is_full_time_student, is_opt_cpt, filed_federal_extension -> no PDF
+      field and no computational effect found (OPT/CPT doesn't change
+      visa_type-driven exemption logic; this engine has no separate
+      late-filing-penalty calculator for extensions to affect). Captured
+      only.
+    - is_degree_candidate -> IRC §117(a) technically requires degree-
+      candidate status for the scholarship exclusion l3_income.py's
+      is_qualified_expense gate already grants, which is a real latent
+      gap — deliberately NOT wired to that gate here: this field's
+      default (False when unanswered) would make the exclusion
+      DISAPPEAR by default for the common case (most F-1/J-1 students
+      genuinely are degree candidates but may not reach/answer this
+      specific extras question), which is a worse, regression-risk
+      direction unlike can_be_claimed_as_dependent above. Needs a
+      required (non-nullable, no-default) intake question before it's
+      safe to gate on.
     """
 
     is_full_time_student: bool = False

@@ -41,6 +41,16 @@ export default function PersonalPage() {
                 onChange={(e) => updateIdentity({ last_name: e.target.value })} required />
             </FormField>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Middle Initial">
+              <input className={inputCls} value={identity.middle_initial} maxLength={1}
+                onChange={(e) => updateIdentity({ middle_initial: e.target.value.toUpperCase().slice(0, 1) })} />
+            </FormField>
+            <FormField label="Suffix" hint="Jr., Sr., III, etc.">
+              <input className={inputCls} value={identity.suffix}
+                onChange={(e) => updateIdentity({ suffix: e.target.value })} placeholder="Jr." />
+            </FormField>
+          </div>
           <FormField label="SSN / ITIN" hint="Edit if OCR extracted incorrectly.">
             <input className={inputCls} value={identity.ssn || identity.itin}
               onChange={(e) => {
@@ -75,6 +85,10 @@ export default function PersonalPage() {
             <input className={inputCls} value={identity.us_address_line1}
               onChange={(e) => updateIdentity({ us_address_line1: e.target.value })} placeholder="100 Main St" required />
           </FormField>
+          <FormField label="Apt / Suite" hint="Optional">
+            <input className={inputCls} value={identity.us_address_line2}
+              onChange={(e) => updateIdentity({ us_address_line2: e.target.value })} placeholder="Apt 4B" />
+          </FormField>
           <div className="grid grid-cols-3 gap-2">
             <FormField label="City" required>
               <input className={inputCls} value={identity.us_city}
@@ -97,16 +111,24 @@ export default function PersonalPage() {
             <input className={inputCls} value={identity.foreign_address_line1}
               onChange={(e) => updateIdentity({ foreign_address_line1: e.target.value })} />
           </FormField>
+          <FormField label="Apt / Suite" hint="Optional">
+            <input className={inputCls} value={identity.foreign_address_line2}
+              onChange={(e) => updateIdentity({ foreign_address_line2: e.target.value })} />
+          </FormField>
           <div className="grid grid-cols-2 gap-2">
             <FormField label="City">
               <input className={inputCls} value={identity.foreign_city}
                 onChange={(e) => updateIdentity({ foreign_city: e.target.value })} />
             </FormField>
-            <FormField label="Postal Code">
-              <input className={inputCls} value={identity.foreign_postal_code}
-                onChange={(e) => updateIdentity({ foreign_postal_code: e.target.value })} />
+            <FormField label="State / Province">
+              <input className={inputCls} value={identity.foreign_state_province}
+                onChange={(e) => updateIdentity({ foreign_state_province: e.target.value })} />
             </FormField>
           </div>
+          <FormField label="Postal Code">
+            <input className={inputCls} value={identity.foreign_postal_code}
+              onChange={(e) => updateIdentity({ foreign_postal_code: e.target.value })} />
+          </FormField>
           <FormField label="Country">
             <CountrySelect value={identity.foreign_country}
               onChange={(v) => updateIdentity({ foreign_country: v })} />
