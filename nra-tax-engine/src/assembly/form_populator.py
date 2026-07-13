@@ -54,6 +54,9 @@ _IRS_TEMPLATE_STEMS = {
     "6251": "f6251",
     "2210": "f2210",
     "8316": "f8316",
+    "IT-203": "it203",
+    "IT-203-B": "it203b",
+    "IT-203-D": "it203d",
 }
 
 
@@ -106,6 +109,15 @@ class FormPopulator:
         # Add Schedule-A if itemized total > 0.
         if float((current_state.sch_a or {}).get("total", 0.0)) > 0 and "Schedule-A" not in required:
             required.append("Schedule-A")
+        # Add IT-203-D if itemized total > 0 and a NY return is being filed
+        # (mirrors the federal Schedule-A trigger — v1 has no separate NY
+        # itemized intake, so "itemized at all" is the only signal available).
+        if (
+            float((current_state.sch_a or {}).get("total", 0.0)) > 0
+            and "IT-203" in required
+            and "IT-203-D" not in required
+        ):
+            required.append("IT-203-D")
         # Add Schedule-NEC if any FDAP income.
         if float(current_state.income.fdap_taxable_total) > 0 and "Schedule-NEC" not in required:
             required.append("Schedule-NEC")

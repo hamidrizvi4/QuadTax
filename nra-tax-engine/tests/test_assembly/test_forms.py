@@ -485,20 +485,155 @@ class TestFormIT203B:
         """Regression test: these were hardcoded to 0/365 regardless of
         intake — NYAgent computes real allocation math from ny_work_days/
         total_work_days/abode_months_in_year but never wrote them back onto
-        NYTaxState, so the form that displays them had nothing to read."""
+        NYTaxState, so the form that displays them had nothing to read.
+
+        Field-map keys match the real vendored IT-203-B's line numbering
+        (1a-1p), verified against the actual PDF's AcroForm structure —
+        not the placeholder keys used before real templates existed."""
         state = _build_china_art20c_state()
         state.ny.ny_work_days = 180
         state.ny.total_work_days = 200
         state.ny.abode_months_in_year = 9
         m = compute("IT-203-B", state)
-        assert m["sched_A_ny_workdays"] == 180
-        assert m["sched_A_total_workdays_in_year"] == 200
-        assert m["sched_A_workdays_outside_ny"] == 20
-        assert m["sched_B_months_maintained"] == 9
+        assert m["1l"] == "180"  # days worked in NY
+        assert m["1h"] == "200"  # total days worked at this job
+        assert m["1i"] == "20"  # days (of 1h) worked outside NY
+        assert m["1n"] == "0.9000"  # 1l / 1m = 180/200
+        # Real form only has a binary "maintained for the entire tax
+        # year" checkbox for Schedule B — no free-text month count.
+        assert "quarters_maintained_all_year" not in m
+
+    def test_quarters_maintained_checkbox_only_when_full_year(self):
+        state = _build_china_art20c_state()
+        state.ny.abode_months_in_year = 12
+        m = compute("IT-203-B", state)
+        assert m["quarters_maintained_all_year"] == "/Yes"
 
     def test_workday_outside_ny_never_negative(self):
         state = _build_china_art20c_state()
         state.ny.ny_work_days = 50
         state.ny.total_work_days = 0  # not yet populated
         m = compute("IT-203-B", state)
-        assert m["sched_A_workdays_outside_ny"] == 0
+        assert m["1i"] == "0"
+
+    def test_1n_uses_wage_day_ratio_not_blended_income_percentage(self):
+        """1n must match the exact ratio ny_source_allocator used to
+        compute ny_source_wages (line 1p) — NOT ny.ny_income_percentage,
+        which also folds in 1042-S/FDAP allocation and can diverge from
+        the pure wage-day ratio."""
+        state = _build_china_art20c_state()
+        state.ny.ny_work_days = 100
+        state.ny.total_work_days = 200
+        state.ny.ny_income_percentage = 0.75  # deliberately different
+        m = compute("IT-203-B", state)
+        assert m["1n"] == "0.5000"
+
+
+class TestFormIT203:
+    def test_identity_filing_status_and_wage_lines(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_source_wages = 25000.0
+        state.ny.ny_agi = 30000.0
+        state.ny.ny_source_income = 25000.0
+        m = compute("IT-203", state)
+        assert m["your_first_name"] == "Ming"
+        assert m["your_last_name"] == "Chen"
+        assert m["filing_status"] == "/1 Single"
+        assert m["line_1_federal"] == "30000"
+        assert m["line_1_ny"] == "25000"
+        assert m["line_31_federal"] == "30000"
+        assert m["line_31_ny"] == "25000"
+
+    def test_mfs_spouse_fields_populated(self):
+        """IT-203, unlike the federal 1040-NR, has real spouse ID lines."""
+        state = _build_china_art20c_state()
+        state.identity.filing_status = "mfs"
+        state.identity.spouse_first_name = "Wei"
+        state.identity.spouse_last_name = "Chen"
+        state.identity.spouse_ssn_or_itin = "912345670"
+        m = compute("IT-203", state)
+        assert "Married Filing Seperate" in m["filing_status"]
+        assert m["spouse_first_name"] == "Wei"
+        assert m["spouse_last_name"] == "Chen"
+        assert m["spouse_ssn"] == "912345670"
+
+    def test_no_spouse_fields_when_ssn_not_provided(self):
+        state = _build_china_art20c_state()
+        state.identity.filing_status = "mfs"
+        m = compute("IT-203", state)
+        assert "spouse_first_name" not in m
+
+    def test_dependent_checkbox_reflects_extras(self):
+        state = _build_china_art20c_state()
+        state.extras.can_be_claimed_as_dependent = True
+        m = compute("IT-203", state)
+        assert m["item_c_dependent"] == "/yes"
+
+    def test_treaty_addback_lands_on_lines_18_and_22(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_treaty_addback = 5000.0
+        state.ny.ny_agi = 35000.0
+        m = compute("IT-203", state)
+        assert m["line_18_federal"] == "5000"
+        assert m["line_22_federal"] == "5000"
+
+    def test_no_treaty_addback_omits_line_18_and_blanks_line_22(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_treaty_addback = 0.0
+        m = compute("IT-203", state)
+        # Line 18 ("Total federal adjustments, Identify") is a conditional
+        # text+amount pair only meaningful with a treaty exemption to name.
+        assert "line_18_federal" not in m
+        # Line 22 is an ordinary money line (like every other numbered
+        # line on this form) — always present, blank when $0, matching
+        # the _fmt_money convention used throughout this codebase.
+        assert m["line_22_federal"] == ""
+
+    def test_itemized_vs_standard_deduction_checkbox(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_standard_deduction = 8000.0
+        m = compute("IT-203", state)
+        assert m["deduction_type"] == "/Standard"
+
+        state.sch_a = {"total": 3000.0}
+        m = compute("IT-203", state)
+        assert m["deduction_type"] == "/Itemized"
+
+    def test_direct_deposit_only_marked_when_refund_owed(self):
+        state = _build_china_art20c_state()
+        state.tax.direct_deposit = True
+        state.tax.routing_number = "021000021"
+        state.tax.account_number = "12345"
+        state.ny.ny_refund_or_owed = 100.0  # amount owed, no refund
+        m = compute("IT-203", state)
+        assert "refund_method" not in m
+
+        state.ny.ny_refund_or_owed = -100.0  # refund due
+        m = compute("IT-203", state)
+        assert m["refund_method"] == "/direct deposit"
+        assert m["routing_number"] == "021000021"
+
+
+class TestFormIT203D:
+    def test_salt_addback_and_final_deduction(self):
+        state = _build_china_art20c_state()
+        state.sch_a = {
+            "total": 3200.0,
+            "state_local_income_tax": 1200.0,
+            "charitable_cash": 2000.0,
+        }
+        m = compute("IT-203-D", state)
+        assert m["line_2_taxes_paid"] == "1200"
+        assert m["line_4_charity"] == "2000"
+        assert m["line_8_total"] == "3200"
+        assert m["line_9_salt_addback"] == "1200"
+        # NY disallows SALT: final NY itemized = federal total - SALT.
+        assert m["line_10"] == "2000"
+        assert m["line_15_ny_itemized"] == "2000"
+
+    def test_no_state_local_tax_no_addback(self):
+        state = _build_china_art20c_state()
+        state.sch_a = {"total": 500.0, "charitable_cash": 500.0}
+        m = compute("IT-203-D", state)
+        assert m["line_9_salt_addback"] == ""
+        assert m["line_10"] == "500"
