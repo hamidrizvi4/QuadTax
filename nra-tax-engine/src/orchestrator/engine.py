@@ -39,6 +39,22 @@ class OrchestrationError(RuntimeError):
     """Raised when a layer's dependencies are not satisfied."""
 
 
+class HumanReviewRequiredError(OrchestrationError):
+    """Raised when the human-in-loop gate blocks assembly.
+
+    Distinct from the base :class:`OrchestrationError` (a real orchestration
+    bug — dependencies violated) so callers, notably the API layer, can
+    surface ``reasons`` to the user as an actionable response instead of an
+    opaque failure.
+    """
+
+    def __init__(self, reasons: List[str]):
+        self.reasons = list(reasons)
+        super().__init__(
+            "Human review required before assembly: " + " | ".join(reasons)
+        )
+
+
 # Layer dependency graph. Each key is a layer id; each value is the set of
 # layers that must be marked complete before that layer may run.
 LAYER_DEPENDENCIES: Dict[str, List[str]] = {
@@ -163,15 +179,10 @@ class TaxEngine:
 
     def _compute_phase3_addons(self, state: ReturnStateObject) -> None:
         """Run AMT, ITIN, and estimated-tax-penalty evaluations and mutate state."""
-        # AMT — taxable income approximated as eci_taxable_total − exempt; this
-        # is a sound first-pass for student returns. A future revision will use
-        # the precise Form 1040-NR line 15 figure once the populator emits it.
-        taxable = max(
-            0.0,
-            float(state.income.eci_taxable_total) - float(state.treaty.exempt_amount_applied),
-        )
+        # AMT input: use the authoritative Form 1040-NR line 15 taxable income
+        # (computed by L6 and stored on state.tax) rather than approximating it.
         amt = AMTCalculator(tax_year=state.tax_year).compute(
-            taxable_income=taxable,
+            taxable_income=float(state.tax.taxable_income),
             regular_tax=float(state.tax.eci_tax_liability),
             filing_status=state.identity.filing_status,
         )
@@ -197,9 +208,13 @@ class TaxEngine:
             state.forms_required.append("W-7")
 
         # Estimated tax penalty — surface Form 2210 attachment if no safe harbor.
+        wh_report = state.withholding_report or {}
+        estimated_paid = float(wh_report.get("federal_estimated_payments", 0.0))
         penalty_result = etp_module.evaluate(
             current_year_total_tax=float(state.tax.total_tax_liability),
-            total_withholding_and_estimated=float(state.tax.total_withholding_credits),
+            total_withholding=float(state.tax.total_withholding_credits) - estimated_paid,
+            estimated_payments=estimated_paid,
+            tax_year=state.tax_year,
         )
         state.estimated_tax_penalty = penalty_result.to_dict_floats()
         if penalty_result.must_attach_form_2210 and "2210" not in state.forms_required:
@@ -342,10 +357,7 @@ class TaxEngine:
         # Human-in-loop gate. Any populated reason blocks assembly until the
         # API caller passes ``force_assembly=True``.
         if state.requires_human_review and not self.force_assembly:
-            raise OrchestrationError(
-                "Human review required before assembly: "
-                + " | ".join(state.requires_human_review)
-            )
+            raise HumanReviewRequiredError(state.requires_human_review)
 
         # Pre-assembly validation
         completed = set(state.completed_layers)

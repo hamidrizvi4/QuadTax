@@ -33,6 +33,74 @@ class TestPostL1:
         validate_post_l1(state)
         assert state.requires_human_review == []
 
+    def test_resident_alien_status_flagged(self):
+        """A resident-alien classification (exempt window expired, or SPT
+        independently met) needs Form 1040, not the 1040-NR this engine
+        generates — must route to human review, not silently assemble the
+        wrong form."""
+        state = ReturnStateObject()
+        state.residency.status = "resident_alien"
+        validate_post_l1(state)
+        assert any("resident alien" in r for r in state.requires_human_review)
+
+    def test_married_but_filing_single_flagged(self):
+        state = ReturnStateObject()
+        state.extras.was_married_on_last_day = True
+        state.identity.filing_status = "single"
+        validate_post_l1(state)
+        assert any("married" in r.lower() for r in state.requires_human_review)
+
+    def test_married_filing_mfs_not_flagged(self):
+        state = ReturnStateObject()
+        state.extras.was_married_on_last_day = True
+        state.identity.filing_status = "mfs"
+        validate_post_l1(state)
+        assert state.requires_human_review == []
+
+    def test_not_married_filing_single_not_flagged(self):
+        state = ReturnStateObject()
+        state.extras.was_married_on_last_day = False
+        state.identity.filing_status = "single"
+        validate_post_l1(state)
+        assert state.requires_human_review == []
+
+    def test_6013g_election_flagged(self):
+        state = ReturnStateObject()
+        state.elections.section_6013g_election = True
+        validate_post_l1(state)
+        assert any("6013" in r for r in state.requires_human_review)
+
+    def test_6013h_election_flagged(self):
+        state = ReturnStateObject()
+        state.elections.section_6013h_election = True
+        validate_post_l1(state)
+        assert any("6013" in r for r in state.requires_human_review)
+
+    def test_871d_election_flagged(self):
+        state = ReturnStateObject()
+        state.elections.section_871d_election = True
+        validate_post_l1(state)
+        assert any("871(d)" in r for r in state.requires_human_review)
+
+    def test_large_foreign_gifts_flagged(self):
+        state = ReturnStateObject()
+        state.elections.large_foreign_gifts_over_100k = True
+        validate_post_l1(state)
+        assert any("3520" in r for r in state.requires_human_review)
+
+    def test_closer_connection_flagged(self):
+        state = ReturnStateObject()
+        state.elections.closer_connection_exception_claimed = True
+        validate_post_l1(state)
+        assert any("8840" in r for r in state.requires_human_review)
+
+    def test_no_elections_no_flag(self):
+        state = ReturnStateObject()
+        state.residency.spt_days_current_year = 300
+        state.residency.years_in_exempt_status = 2
+        validate_post_l1(state)
+        assert state.requires_human_review == []
+
 
 class TestPostL3:
     def test_negative_wages_flagged(self):

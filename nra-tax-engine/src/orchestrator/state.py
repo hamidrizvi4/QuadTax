@@ -93,6 +93,12 @@ class TaxpayerIdentityState(BaseModel):
         description="NRA-permitted filing status. MFJ and HOH are not allowed on 1040-NR.",
     )
 
+    # Verified against every vendored TY2025 form (1040-NR, Schedule OI/A/NEC)
+    # via a full-text search for "spouse": none has a spouse name/SSN field
+    # to map these to — the 1040-NR's only "Spouse" label is a date-of-death
+    # box, not an identification line. Kept for forward-compatibility (e.g.
+    # a future MFJ-adjacent form) rather than removed; deliberately not
+    # wired to any populator since no real target exists today.
     spouse_first_name: str = Field(default="")
     spouse_last_name: str = Field(default="")
     spouse_ssn_or_itin: str = Field(default="")
@@ -130,8 +136,30 @@ class ResidencyState(BaseModel):
             "year, as counted by the deterministic SPT calculator. Does NOT "
             "include exempt days for F/J/Q visa holders (those are subtracted "
             "before this value is set). Used as input to the SPT formula "
-            "(current × 1 + prior_1 × 1/3 + prior_2 × 1/6 ≥ 183)."
+            "(current × 1 + prior_1 × 1/3 + prior_2 × 1/6 ≥ 183). Do NOT use "
+            "this for Form 8843 line 4a, which wants raw physical presence "
+            "regardless of exempt status — use days_present_* below instead."
         ),
+    )
+
+    days_present_current_year: int = Field(
+        default=0,
+        ge=0,
+        le=366,
+        description=(
+            "Raw days physically present in the US during the current tax "
+            "year, BEFORE any exempt-individual exclusion — unlike "
+            "spt_days_current_year, this is never zeroed out for an exempt "
+            "F/J/M/Q filer. This is what Form 8843 Part I line 4a asks for."
+        ),
+    )
+    days_present_year_minus_1: int = Field(
+        default=0, ge=0, le=366,
+        description="Raw days physically present in the US during tax_year - 1.",
+    )
+    days_present_year_minus_2: int = Field(
+        default=0, ge=0, le=366,
+        description="Raw days physically present in the US during tax_year - 2.",
     )
 
     exempt_visa_type: Optional[str] = Field(
@@ -144,6 +172,62 @@ class ResidencyState(BaseModel):
             "(5 calendar years for F-1; 2 for J-1 researchers). None means "
             "no exempt visa applies."
         ),
+    )
+    visa_subtype: Literal["student", "teacher_researcher", "trainee", "other"] = Field(
+        default="student",
+        description=(
+            "Distinguishes a J-1 teacher/researcher (2-calendar-year exempt "
+            "window) from a J-1 student (5-calendar-year window) — the two "
+            "share the same visa_type='J-1' but have different SPT exemption "
+            "periods under IRC §7701(b)(5). Only meaningful for J-1; F-1/M-1/Q-1 "
+            "always use the 5-year student window regardless of this value."
+        ),
+    )
+    prior_year_residency_status: Literal["nonresident_alien", "resident_alien", "none"] = Field(
+        default="none",
+        description=(
+            "Filer-reported residency status for the immediately preceding "
+            "tax year, from intake. Drives Schedule OI Item E disclosure "
+            "('were you a US resident in a prior year?') AND, when set to "
+            "'resident_alien', L1's prior_visa_was_resident input to "
+            "departure-year dual-status detection."
+        ),
+    )
+
+    # ── Dual-status detection inputs (intake-seeded) ───────────────────
+    first_us_entry_date: Optional[str] = Field(
+        default=None,
+        description=(
+            "ISO date of the filer's first-ever US entry, from intake. Only "
+            "used by L1 for arrival-year dual-status detection when "
+            "first_us_arrival_year == tax_year."
+        ),
+    )
+    is_still_in_us: bool = Field(
+        default=True,
+        description="False if the filer left the US before the end of the tax year.",
+    )
+    intended_departure_date: Optional[str] = Field(
+        default=None,
+        description="ISO date the filer left the US, when is_still_in_us is False.",
+    )
+
+    # ── Dual-status detection outputs (L1-computed) ────────────────────
+    is_dual_status: bool = Field(
+        default=False,
+        description="True when L1 detected an arrival-year or departure-year residency change.",
+    )
+    residency_start_date: Optional[str] = Field(
+        default=None,
+        description="Arrival-year dual status: the date NRA-to-RA residency began.",
+    )
+    residency_end_date: Optional[str] = Field(
+        default=None,
+        description="Departure-year dual status: the date RA-to-NRA residency ended.",
+    )
+    dual_status_reason: Optional[str] = Field(
+        default=None,
+        description="Plain-English citation explaining which dual-status trigger applied.",
     )
 
     years_in_exempt_status: int = Field(
@@ -260,6 +344,19 @@ class IncomeState(BaseModel):
         description="Aggregate Medicare tax erroneously withheld from W-2s (Box 6)."
     )
 
+    employer_name: str = Field(
+        default="",
+        description=(
+            "Primary employer's name, from intake or W-2 OCR. Used on Form "
+            "843's and Form 8316's employer-identification lines and NY "
+            "IT-203-B Schedule A."
+        ),
+    )
+    employer_ein: str = Field(
+        default="",
+        description="Primary employer's EIN, from intake or W-2 OCR. Used on Form 843.",
+    )
+
 class TreatyState(BaseModel):
     """L6 (part 1) — Tax treaty application results.
 
@@ -338,6 +435,17 @@ class TreatyState(BaseModel):
             "Notice 2010-21 exception. Drives forms_required population."
         ),
     )
+    prior_year_treaty_claim_total: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Filer-reported treaty-exempt amount claimed in the prior tax "
+            "year, from intake — display-only, for Schedule OI Item L's "
+            "'amount claimed in prior years' column. Does not affect the "
+            "current year's exemption math (treaty caps are applied fresh "
+            "per tax year)."
+        ),
+    )
 
 
 class FicaState(BaseModel):
@@ -391,6 +499,20 @@ class FicaState(BaseModel):
             "The employer must first refuse to issue the refund directly."
         ),
     )
+    employer_attempted_refund: bool = Field(
+        default=False,
+        description=(
+            "Filer-confirmed: they asked their employer for a FICA refund. "
+            "Treas. Reg. §31.3121(b)(19)-1 requires this before Form 843 is "
+            "proper. Drives whether Form 843/8316's explanation text can "
+            "assert employer refusal as a confirmed fact vs. an unconfirmed "
+            "claim."
+        ),
+    )
+    has_form_8316: bool = Field(
+        default=False,
+        description="Filer-confirmed: an employer-signed Form 8316 statement is in hand.",
+    )
 
 
 class NYTaxState(BaseModel):
@@ -415,6 +537,18 @@ class NYTaxState(BaseModel):
     days_in_ny: int = Field(default=0, ge=0, le=366)
     nyc_resident: bool = Field(default=False)
     yonkers_resident: bool = Field(default=False)
+    ny_work_days: int = Field(
+        default=0, ge=0, le=366,
+        description="Work days spent physically in NY — IT-203-B Schedule A.",
+    )
+    total_work_days: int = Field(
+        default=0, ge=0, le=366,
+        description="Total work days for the year (NY + elsewhere) — IT-203-B Schedule A.",
+    )
+    abode_months_in_year: int = Field(
+        default=0, ge=0, le=12,
+        description="Months a NY abode was maintained — IT-203-B Schedule B.",
+    )
 
     ny_source_wages: float = Field(default=0.0, ge=0.0)
     ny_source_1042s_gross: float = Field(default=0.0, ge=0.0)
@@ -546,6 +680,113 @@ class TaxCalculatedState(BaseModel):
         ),
     )
 
+    direct_deposit: bool = Field(
+        default=False,
+        description="True if the filer requested direct deposit for their federal refund.",
+    )
+    routing_number: str = Field(default="", description="9-digit ABA routing number.")
+    account_number: str = Field(default="", description="Bank account number.")
+    account_type: Literal["checking", "savings", ""] = Field(
+        default="",
+        description="Account type for direct deposit — Form 1040-NR line 35c.",
+    )
+
+
+class ElectionsState(BaseModel):
+    """Tax elections / disclosures the filer has made, seeded from intake.
+
+    None of these are supported by the deterministic NRA (§871) pipeline
+    this engine implements — a §6013 election means filing as a full
+    resident under §1 (worldwide income, a different tax regime entirely),
+    large foreign gifts / the closer-connection exception each require a
+    standalone form (3520 / 8840) this engine does not generate, and a
+    §871(d) election requires computing real-property income as ECI, which
+    has no supporting income category anywhere in this engine — checking
+    Schedule OI's disclosure box without that underlying computation would
+    be actively misleading, not just incomplete. When any of these is True,
+    validate_post_l1 blocks automatic assembly rather than silently
+    producing a return that omits a legally required disclosure or applies
+    the wrong tax treatment.
+    """
+
+    section_6013g_election: bool = Field(
+        default=False,
+        description="§6013(g): NRA spouse of US person elected to be treated as resident.",
+    )
+    section_6013h_election: bool = Field(
+        default=False,
+        description="§6013(h): dual-status-year election to be treated as resident.",
+    )
+    section_871d_election: bool = Field(
+        default=False,
+        description="§871(d): real-property income treated as ECI — no supporting income category in this engine.",
+    )
+    large_foreign_gifts_over_100k: bool = Field(
+        default=False,
+        description="Received gifts/bequests over $100,000 from a foreign person or estate — triggers Form 3520.",
+    )
+    closer_connection_exception_claimed: bool = Field(
+        default=False,
+        description="Claiming the closer-connection-to-a-foreign-country exception — requires Form 8840.",
+    )
+
+
+class ExtrasState(BaseModel):
+    """Miscellaneous intake answers seeded from the frontend's "extras" step.
+
+    Consumer status per field, verified by a full-text search of every
+    vendored TY2025 form (1040-NR, Schedule OI/A/NEC, 8843, 843) for
+    "full-time"/"degree candidate"/"dependent"/"extension"/"OPT"/"CPT" —
+    none of those strings appear anywhere, so several of these genuinely
+    have no PDF field to map to, not just an unwired one:
+
+    - filed_previous_federal_return -> Schedule OI Item H.
+    - made_estimated_federal_payments / estimated_federal_payment_amount ->
+      1040-NR line 26, via withholding_reconciler.
+    - can_be_claimed_as_dependent -> gates the IRC §63(c)(5) capped
+      standard deduction for India Article 21(2) filers (l6_tax_calc.py) —
+      a real computational input, not just a display field. Defaults to
+      False, matching prior (uncapped) behavior when unanswered, so this
+      only ever makes the computed deduction smaller/more conservative
+      relative to before, never larger.
+    - was_married_on_last_day -> validate_post_l1 flags an inconsistency
+      when set True alongside filing_status="single" (a married NRA must
+      file MFS, never single) — a data-quality check, not a form field.
+    - is_full_time_student, is_opt_cpt, filed_federal_extension -> no PDF
+      field and no computational effect found (OPT/CPT doesn't change
+      visa_type-driven exemption logic; this engine has no separate
+      late-filing-penalty calculator for extensions to affect). Captured
+      only.
+    - is_degree_candidate -> IRC §117(a) technically requires degree-
+      candidate status for the scholarship exclusion l3_income.py's
+      is_qualified_expense gate already grants, which is a real latent
+      gap — deliberately NOT wired to that gate here: this field's
+      default (False when unanswered) would make the exclusion
+      DISAPPEAR by default for the common case (most F-1/J-1 students
+      genuinely are degree candidates but may not reach/answer this
+      specific extras question), which is a worse, regression-risk
+      direction unlike can_be_claimed_as_dependent above. Needs a
+      required (non-nullable, no-default) intake question before it's
+      safe to gate on.
+    """
+
+    is_full_time_student: bool = False
+    is_degree_candidate: bool = False
+    is_opt_cpt: bool = False
+    had_digital_assets: bool = False
+    can_be_claimed_as_dependent: bool = False
+    was_married_on_last_day: bool = False
+    made_estimated_federal_payments: bool = False
+    estimated_federal_payment_amount: float = Field(default=0.0, ge=0.0)
+    made_estimated_state_payments: bool = False
+    filed_federal_extension: bool = False
+    filed_previous_federal_return: bool = Field(
+        default=False,
+        description="Schedule OI Item H — filed a 1040 in the prior tax year.",
+    )
+    previous_return_year: Optional[int] = None
+    previous_return_type: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Master State Object
@@ -594,6 +835,14 @@ class ReturnStateObject(BaseModel):
     ny: NYTaxState = Field(
         default_factory=NYTaxState,
         description="L9 output: NY state, NYC, and Yonkers tax results.",
+    )
+    elections: ElectionsState = Field(
+        default_factory=ElectionsState,
+        description="Intake-populated tax elections/disclosures out of scope for this engine.",
+    )
+    extras: ExtrasState = Field(
+        default_factory=ExtrasState,
+        description="Miscellaneous intake answers from the frontend's extras step.",
     )
 
     # ── Pipeline-level constants ──────────────────────────────────────

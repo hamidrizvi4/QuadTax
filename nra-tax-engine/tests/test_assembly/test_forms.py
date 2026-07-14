@@ -28,6 +28,9 @@ def _build_china_art20c_state() -> ReturnStateObject:
     state.residency.exempt_visa_type = "F-1"
     state.residency.years_in_exempt_status = 2
     state.residency.spt_days_current_year = 300
+    state.residency.days_present_current_year = 300
+    state.residency.days_present_year_minus_1 = 365
+    state.residency.days_present_year_minus_2 = 0
     state.residency.is_exempt_individual = True
 
     state.income.total_w2_wages = 30000.0
@@ -112,6 +115,40 @@ class TestForm1040NR:
         # Filing status checkboxes
         assert m["filing_status_single"] is True
         assert m["filing_status_mfs"] is False
+        # Direct deposit not requested by default -> banking lines blank.
+        assert m["line_35b_routing_number"] == ""
+        assert m["line_35c_account_type_checking"] is False
+        assert m["line_35d_account_number"] == ""
+        # Digital assets defaults to No.
+        assert m["digital_assets_yes"] is False
+        assert m["digital_assets_no"] is True
+
+    def test_digital_assets_yes_when_extras_flag_set(self):
+        state = _build_china_art20c_state()
+        state.extras.had_digital_assets = True
+        m = compute("1040-NR", state)
+        assert m["digital_assets_yes"] is True
+        assert m["digital_assets_no"] is False
+
+    def test_direct_deposit_fills_banking_lines(self):
+        state = _build_china_art20c_state()
+        state.tax.direct_deposit = True
+        state.tax.routing_number = "021000021"
+        state.tax.account_number = "000123456789"
+        state.tax.account_type = "checking"
+        m = compute("1040-NR", state)
+        assert m["line_35b_routing_number"] == "021000021"
+        assert m["line_35d_account_number"] == "000123456789"
+        assert m["line_35c_account_type_checking"] is True
+        assert m["line_35c_account_type_savings"] is False
+
+    def test_direct_deposit_savings_account(self):
+        state = _build_china_art20c_state()
+        state.tax.direct_deposit = True
+        state.tax.account_type = "savings"
+        m = compute("1040-NR", state)
+        assert m["line_35c_account_type_checking"] is False
+        assert m["line_35c_account_type_savings"] is True
 
 
 class TestScheduleOI:
@@ -126,24 +163,61 @@ class TestScheduleOI:
         assert m["item_A_country_citizenship"] == "CN"
         assert m["item_C_visa_type"] == "F-1"
         assert m["item_G_days_current_year"] == 300
+        assert m["item_G_days_year_minus_1"] == 365
+        assert m["item_G_days_year_minus_2"] == 0
+
+    def test_item_h_reflects_extras_filed_previous_return(self):
+        state = _build_china_art20c_state()
+        state.extras.filed_previous_federal_return = True
+        m = compute("Schedule-OI", state)
+        assert m["item_H_filed_1040_prior_year"] is True
+
+    def test_elections_reflected_when_force_assembled(self):
+        """Items I/K/M mirror state.elections — only reachable in practice
+        via force_assembly=True since the human-review gate blocks assembly
+        whenever any of these is set."""
+        state = _build_china_art20c_state()
+        state.elections.section_6013g_election = True
+        state.elections.section_871d_election = True
+        state.elections.large_foreign_gifts_over_100k = True
+        state.elections.closer_connection_exception_claimed = True
+        m = compute("Schedule-OI", state)
+        assert m["item_I_6013_election"] is True
+        assert m["item_J_871d_election"] is True
+        assert m["item_K_large_foreign_gifts"] is True
+        assert m["item_M_closer_connection"] is True
+
+    def test_prior_year_treaty_claim_on_first_row(self):
+        state = _build_china_art20c_state()
+        state.treaty.prior_year_treaty_claim_total = 4500.0
+        m = compute("Schedule-OI", state)
+        assert m["item_L_treaty_rows"][0]["amount_prior_years"] == 4500.0
+
+    def test_prior_year_resident_status_reflected(self):
+        state = _build_china_art20c_state()
+        state.residency.prior_year_residency_status = "resident_alien"
+        m = compute("Schedule-OI", state)
+        assert m["item_E_prior_year_resident"] is True
 
 
 class TestScheduleNEC:
     def test_no_fdap_yields_empty_money_fields(self):
         state = _build_china_art20c_state()  # no FDAP for this filer
         m = compute("Schedule-NEC", state)
-        assert m["line_15c_total_30"] == ""
-        assert m["line_12_scholarship_14"] == ""
-        assert m["line_16_tax_total"] == ""
+        assert m["line_14_tax_30"] == ""
+        assert m["line_12_scholarship_other_rate"] == ""
+        assert m["line_15_tax_total"] == ""
 
     def test_with_fdap_routes_to_correct_column(self):
         state = _build_china_art20c_state()
         state.income.fdap_taxable_total = 5000.0
         state.tax.fdap_tax_liability = 700.0
         m = compute("Schedule-NEC", state)
-        # F-1 → 14% column gets the scholarship.
-        assert m["line_12_scholarship_14"] == "5000"
-        assert m["line_16_tax_total"] == "700"
+        # F-1 → this form has no dedicated 14% column, so it lands in "Other rate".
+        assert m["line_12_scholarship_other_rate"] == "5000"
+        assert m["line_13_subtotal_other_rate"] == "5000"
+        assert m["line_14_tax_other_rate"] == "5000"
+        assert m["line_15_tax_total"] == "700"
 
 
 class TestScheduleA:
@@ -173,9 +247,41 @@ class TestForm8843:
         m = compute("8843", state)
         assert m["part_I_name"] == "Ming Chen"
         assert m["part_I_visa_type_current"] == "F-1"
-        assert m["part_III_relevant"] is True
-        assert m["part_III_line_11_years_in_exempt_status"] == 2
-        assert m["part_IV_relevant"] is False
+        assert m["_part_III_relevant"] is True
+        assert m["_part_IV_relevant"] is False
+
+    def test_line_4a_uses_raw_presence_not_spt_adjusted(self):
+        """spt_days_current_year is 0 for a fully-exempt filer; line 4a must
+        still report actual physical presence, not the SPT-purposes count."""
+        state = _build_china_art20c_state()
+        state.residency.spt_days_current_year = 0  # fully excluded as exempt
+        state.residency.days_present_current_year = 300
+        state.residency.days_present_year_minus_1 = 200
+        state.residency.days_present_year_minus_2 = 50
+        m = compute("8843", state)
+        assert m["part_I_days_current_year"] == 300
+        assert m["part_I_days_year_minus_1"] == 200
+        assert m["part_I_days_year_minus_2"] == 50
+        assert m["part_I_days_excluded_for_spt"] == 300
+
+    def test_line_11_visa_grid_reflects_first_exempt_year(self):
+        """tax_year=2025, years_in_exempt_status=2 -> first exempt year 2024,
+        which is the most recent slot (yr_minus_1) in the 2019-2024 window."""
+        state = _build_china_art20c_state()
+        m = compute("8843", state)
+        assert m["part_III_line_11_visa_yr_minus_1"] == "F-1"  # 2024
+        assert m["part_III_line_11_visa_yr_minus_2"] == ""  # 2023, pre-arrival
+        assert m["part_III_line_11_visa_yr_minus_6"] == ""  # 2019, pre-arrival
+
+    def test_line_12_exempt_more_than_5_years(self):
+        state = _build_china_art20c_state()
+        state.residency.years_in_exempt_status = 2
+        m = compute("8843", state)
+        assert m["part_III_line_12_exempt_more_than_5_years"] is False
+
+        state.residency.years_in_exempt_status = 6
+        m = compute("8843", state)
+        assert m["part_III_line_12_exempt_more_than_5_years"] is True
 
 
 class TestForm8833:
@@ -199,6 +305,32 @@ class TestForm843:
         assert "§3121(b)(19)" in m["line_4_explanation_irc_section"]
         assert "F-1" in m["line_7_explanation_text"]
 
+    def test_explanation_does_not_assert_unconfirmed_employer_refusal(self):
+        """Without employer_attempted_refund confirmed, the explanation must
+        not claim the employer was asked — that would misstate a fact on a
+        document filed under penalty of perjury."""
+        state = _build_china_art20c_state()
+        state.fica.employer_attempted_refund = False
+        state.fica.has_form_8316 = False
+        m = compute("843", state)
+        text = m["line_7_explanation_text"]
+        assert "requested a refund from the employer and did not receive" not in text
+        assert "should request a refund from the employer" in text
+
+    def test_explanation_reflects_confirmed_employer_attempt(self):
+        state = _build_china_art20c_state()
+        state.fica.employer_attempted_refund = True
+        state.fica.has_form_8316 = False
+        m = compute("843", state)
+        assert "requested a refund from the employer and did not receive" in m["line_7_explanation_text"]
+
+    def test_explanation_reflects_employer_written_statement(self):
+        state = _build_china_art20c_state()
+        state.fica.employer_attempted_refund = True
+        state.fica.has_form_8316 = True
+        m = compute("843", state)
+        assert "confirmed in writing that it will not issue a refund" in m["line_7_explanation_text"]
+
 
 class TestFormW7:
     def test_reason_code_a_when_treaty_claim(self):
@@ -207,6 +339,28 @@ class TestFormW7:
         assert m["reason_code"] == "a"
         assert m["passport_number"] == "E12345678"
         assert m["treaty_country_when_reason_a"] == "CN"
+        # Exactly one of the 8 reason checkboxes should be True.
+        assert m["reason_a"] is True
+        for letter in "bcdefgh":
+            assert m[f"reason_{letter}"] is False
+        assert m["application_type_new"] is True
+        assert m["application_type_renewal"] is False
+
+    def test_reason_code_f_default_checks_only_f(self):
+        state = _build_china_art20c_state()
+        state.treaty.applied_benefits = []  # no 8833 requirement -> falls to default "f"
+        m = compute("W-7", state)
+        assert m["reason_code"] == "f"
+        assert m["reason_f"] is True
+        for letter in "abcdegh":
+            assert m[f"reason_{letter}"] is False
+
+    def test_renewal_flag_reflects_itin_eligibility(self):
+        state = _build_china_art20c_state()
+        state.itin_eligibility = {"is_renewal": True}
+        m = compute("W-7", state)
+        assert m["application_type_new"] is False
+        assert m["application_type_renewal"] is True
 
 
 class TestForm6251:
@@ -215,6 +369,16 @@ class TestForm6251:
         m = compute("6251", state)
         assert m["line_11_amt_owed"] == ""
         assert m["_binds"] is False
+
+    def test_line_1_uses_taxable_income_not_tax_liability(self):
+        """Regression test: line 1 was reading eci_tax_liability (a computed
+        tax dollar amount) instead of taxable_income — the author's own
+        '# placeholder' comment confirmed this was known-wrong."""
+        state = _build_china_art20c_state()
+        state.tax.taxable_income = 25000.0
+        state.tax.eci_tax_liability = 2762.0  # deliberately different
+        m = compute("6251", state)
+        assert m["line_1_taxable_income"] == "25000"
 
 
 class TestForm2210:
@@ -314,3 +478,162 @@ class TestIndiaForm1040NR:
         assert m["count"] == 1
         assert m["rows"][0]["box_2_treaty_country"] == "India"
         assert m["rows"][0]["box_3_treaty_article"] == "21(2)"
+
+
+class TestFormIT203B:
+    def test_workday_and_abode_fields_reflect_real_ny_state(self):
+        """Regression test: these were hardcoded to 0/365 regardless of
+        intake — NYAgent computes real allocation math from ny_work_days/
+        total_work_days/abode_months_in_year but never wrote them back onto
+        NYTaxState, so the form that displays them had nothing to read.
+
+        Field-map keys match the real vendored IT-203-B's line numbering
+        (1a-1p), verified against the actual PDF's AcroForm structure —
+        not the placeholder keys used before real templates existed."""
+        state = _build_china_art20c_state()
+        state.ny.ny_work_days = 180
+        state.ny.total_work_days = 200
+        state.ny.abode_months_in_year = 9
+        m = compute("IT-203-B", state)
+        assert m["1l"] == "180"  # days worked in NY
+        assert m["1h"] == "200"  # total days worked at this job
+        assert m["1i"] == "20"  # days (of 1h) worked outside NY
+        assert m["1n"] == "0.9000"  # 1l / 1m = 180/200
+        # Real form only has a binary "maintained for the entire tax
+        # year" checkbox for Schedule B — no free-text month count.
+        assert "quarters_maintained_all_year" not in m
+
+    def test_quarters_maintained_checkbox_only_when_full_year(self):
+        state = _build_china_art20c_state()
+        state.ny.abode_months_in_year = 12
+        m = compute("IT-203-B", state)
+        assert m["quarters_maintained_all_year"] == "/Yes"
+
+    def test_workday_outside_ny_never_negative(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_work_days = 50
+        state.ny.total_work_days = 0  # not yet populated
+        m = compute("IT-203-B", state)
+        assert m["1i"] == "0"
+
+    def test_1n_uses_wage_day_ratio_not_blended_income_percentage(self):
+        """1n must match the exact ratio ny_source_allocator used to
+        compute ny_source_wages (line 1p) — NOT ny.ny_income_percentage,
+        which also folds in 1042-S/FDAP allocation and can diverge from
+        the pure wage-day ratio."""
+        state = _build_china_art20c_state()
+        state.ny.ny_work_days = 100
+        state.ny.total_work_days = 200
+        state.ny.ny_income_percentage = 0.75  # deliberately different
+        m = compute("IT-203-B", state)
+        assert m["1n"] == "0.5000"
+
+
+class TestFormIT203:
+    def test_identity_filing_status_and_wage_lines(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_source_wages = 25000.0
+        state.ny.ny_agi = 30000.0
+        state.ny.ny_source_income = 25000.0
+        m = compute("IT-203", state)
+        assert m["your_first_name"] == "Ming"
+        assert m["your_last_name"] == "Chen"
+        assert m["filing_status"] == "/1 Single"
+        assert m["line_1_federal"] == "30000"
+        assert m["line_1_ny"] == "25000"
+        assert m["line_31_federal"] == "30000"
+        assert m["line_31_ny"] == "25000"
+
+    def test_mfs_spouse_fields_populated(self):
+        """IT-203, unlike the federal 1040-NR, has real spouse ID lines."""
+        state = _build_china_art20c_state()
+        state.identity.filing_status = "mfs"
+        state.identity.spouse_first_name = "Wei"
+        state.identity.spouse_last_name = "Chen"
+        state.identity.spouse_ssn_or_itin = "912345670"
+        m = compute("IT-203", state)
+        assert "Married Filing Seperate" in m["filing_status"]
+        assert m["spouse_first_name"] == "Wei"
+        assert m["spouse_last_name"] == "Chen"
+        assert m["spouse_ssn"] == "912345670"
+
+    def test_no_spouse_fields_when_ssn_not_provided(self):
+        state = _build_china_art20c_state()
+        state.identity.filing_status = "mfs"
+        m = compute("IT-203", state)
+        assert "spouse_first_name" not in m
+
+    def test_dependent_checkbox_reflects_extras(self):
+        state = _build_china_art20c_state()
+        state.extras.can_be_claimed_as_dependent = True
+        m = compute("IT-203", state)
+        assert m["item_c_dependent"] == "/yes"
+
+    def test_treaty_addback_lands_on_lines_18_and_22(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_treaty_addback = 5000.0
+        state.ny.ny_agi = 35000.0
+        m = compute("IT-203", state)
+        assert m["line_18_federal"] == "5000"
+        assert m["line_22_federal"] == "5000"
+
+    def test_no_treaty_addback_omits_line_18_and_blanks_line_22(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_treaty_addback = 0.0
+        m = compute("IT-203", state)
+        # Line 18 ("Total federal adjustments, Identify") is a conditional
+        # text+amount pair only meaningful with a treaty exemption to name.
+        assert "line_18_federal" not in m
+        # Line 22 is an ordinary money line (like every other numbered
+        # line on this form) — always present, blank when $0, matching
+        # the _fmt_money convention used throughout this codebase.
+        assert m["line_22_federal"] == ""
+
+    def test_itemized_vs_standard_deduction_checkbox(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_standard_deduction = 8000.0
+        m = compute("IT-203", state)
+        assert m["deduction_type"] == "/Standard"
+
+        state.sch_a = {"total": 3000.0}
+        m = compute("IT-203", state)
+        assert m["deduction_type"] == "/Itemized"
+
+    def test_direct_deposit_only_marked_when_refund_owed(self):
+        state = _build_china_art20c_state()
+        state.tax.direct_deposit = True
+        state.tax.routing_number = "021000021"
+        state.tax.account_number = "12345"
+        state.ny.ny_refund_or_owed = 100.0  # amount owed, no refund
+        m = compute("IT-203", state)
+        assert "refund_method" not in m
+
+        state.ny.ny_refund_or_owed = -100.0  # refund due
+        m = compute("IT-203", state)
+        assert m["refund_method"] == "/direct deposit"
+        assert m["routing_number"] == "021000021"
+
+
+class TestFormIT203D:
+    def test_salt_addback_and_final_deduction(self):
+        state = _build_china_art20c_state()
+        state.sch_a = {
+            "total": 3200.0,
+            "state_local_income_tax": 1200.0,
+            "charitable_cash": 2000.0,
+        }
+        m = compute("IT-203-D", state)
+        assert m["line_2_taxes_paid"] == "1200"
+        assert m["line_4_charity"] == "2000"
+        assert m["line_8_total"] == "3200"
+        assert m["line_9_salt_addback"] == "1200"
+        # NY disallows SALT: final NY itemized = federal total - SALT.
+        assert m["line_10"] == "2000"
+        assert m["line_15_ny_itemized"] == "2000"
+
+    def test_no_state_local_tax_no_addback(self):
+        state = _build_china_art20c_state()
+        state.sch_a = {"total": 500.0, "charitable_cash": 500.0}
+        m = compute("IT-203-D", state)
+        assert m["line_9_salt_addback"] == ""
+        assert m["line_10"] == "500"

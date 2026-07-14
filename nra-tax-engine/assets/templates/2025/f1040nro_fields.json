@@ -7,5 +7,24 @@
   "item_G_days_year_minus_1": "form1040-NR[0].Page1[0].f1_24[0]",
   "item_G_days_year_minus_2": "form1040-NR[0].Page1[0].f1_23[0]",
   "item_H_filed_1040_prior_year": "form1040-NR[0].Page1[0].c1_6[0]",
-  "item_J_871d_election": "form1040-NR[0].Page1[0].c1_13[0]"
+  "item_J_871d_election": "form1040-NR[0].Page1[0].c1_13[0]",
+  "item_E_prior_year_resident": "form1040-NR[0].Page1[0].c1_3[0]",
+  "item_F_first_year_in_visa": "form1040-NR[0].Page1[0].f1_6[0]",
+  "item_L_treaty_rows": [
+    {
+      "country": "form1040-NR[0].Page1[0].LineL1_Table[0].BodyRow1[0].f1_27[0]",
+      "article": "form1040-NR[0].Page1[0].LineL1_Table[0].BodyRow1[0].f1_28[0]",
+      "amount_this_year": "form1040-NR[0].Page1[0].LineL1_Table[0].BodyRow1[0].f1_30[0]"
+    },
+    {
+      "country": "form1040-NR[0].Page1[0].LineL1_Table[0].BodyRow2[0].f1_31[0]",
+      "article": "form1040-NR[0].Page1[0].LineL1_Table[0].BodyRow2[0].f1_32[0]",
+      "amount_this_year": "form1040-NR[0].Page1[0].LineL1_Table[0].BodyRow2[0].f1_34[0]"
+    },
+    {
+      "country": "form1040-NR[0].Page1[0].LineL1_Table[0].BodyRow3[0].f1_35[0]",
+      "article": "form1040-NR[0].Page1[0].LineL1_Table[0].BodyRow3[0].f1_36[0]",
+      "amount_this_year": "form1040-NR[0].Page1[0].LineL1_Table[0].BodyRow3[0].f1_38[0]"
+    }
+  ]
 }

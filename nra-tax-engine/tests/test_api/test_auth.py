@@ -27,6 +27,20 @@ def test_auth_fails_closed_if_key_unset():
         assert "authentication not configured" in r.json()["detail"]
 
 
+def test_auth_fails_closed_if_key_is_placeholder():
+    """Server fails closed (503) if QUADTAX_API_KEY is still the literal
+    .env.example placeholder — a deployer forgetting to change it must not
+    silently authenticate everyone who knows the public example value."""
+    with patch.dict(os.environ, {"QUADTAX_API_KEY": "change-me-to-a-long-random-secret"}):
+        r = client.post(
+            "/api/v1/submit",
+            json={"intake": {"identity": {"filing_status": "single"}}},
+            headers={"Authorization": "Bearer change-me-to-a-long-random-secret"},
+        )
+        assert r.status_code == 503
+        assert "authentication not configured" in r.json()["detail"]
+
+
 def test_auth_401_if_header_missing():
     """Missing Authorization header → 401."""
     with patch.dict(os.environ, {"QUADTAX_API_KEY": "secret123"}):

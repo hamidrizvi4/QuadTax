@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from src.agents._llm_safety import safe_parse
 from src.functions.treaty_evaluator import TreatyEvaluator
 from src.functions.treaty_schema import AppliedTreatyBenefit, TreatyCategory
+from src.llm_config import PRIMARY_MODEL, SECONDARY_MODEL, get_openai_client
 
 if TYPE_CHECKING:
     from src.orchestrator.state import ReturnStateObject
@@ -65,9 +66,7 @@ class TreatyAgent:
 
     def __init__(self, llm_client: Any = None, secondary_llm_client: Any = None):
         if llm_client is None:
-            from openai import OpenAI
-
-            self.llm_client = OpenAI()
+            self.llm_client = get_openai_client()
         else:
             self.llm_client = llm_client
         self.secondary_llm_client = secondary_llm_client
@@ -88,14 +87,14 @@ class TreatyAgent:
         )
         result = safe_parse(
             primary_client=self.llm_client,
-            primary_model="gpt-4o-2024-08-06",
+            primary_model=PRIMARY_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Income description:\n{income_description}"},
             ],
             response_format=TreatyCategoryMapping,
             secondary_client=self.secondary_llm_client,
-            secondary_model="gpt-4o-mini" if self.secondary_llm_client else None,
+            secondary_model=SECONDARY_MODEL if self.secondary_llm_client else None,
         )
         return result.mapped_category
 

@@ -4,6 +4,10 @@ import pytest
 from pydantic import ValidationError
 
 from src.intake.intake_schema import (
+    IntakeBanking,
+    IntakeElections,
+    IntakeExtras,
+    IntakeFICA,
     IntakeIdentity,
     IntakeIncome,
     IntakeNYContext,
@@ -128,3 +132,91 @@ class TestMCQRouter:
         assert f1040["last_name"] == "Chen"
         assert f1040["us_state"] == "NY"
         assert f1040["identifying_number"] == "912345678"
+
+    def test_populate_state_seeds_employer_from_fica_intake(self):
+        """Regression test: employer name/EIN typed into the FICA intake step
+        must reach state (and from there, Forms 843/8316/IT-203-B) instead of
+        being silently dropped."""
+        payload = _full_payload()
+        payload.fica = IntakeFICA(
+            employer_attempted_refund=True,
+            employer_name="New York University",
+            employer_ein="13-5562308",
+        )
+        state = self.router.populate_state(payload)
+        assert state.income.employer_name == "New York University"
+        assert state.income.employer_ein == "13-5562308"
+
+    def test_populate_state_seeds_elections_from_intake(self):
+        """Regression test: elections typed at intake (§6013 election, large
+        foreign gifts, closer-connection exception) must reach state so
+        validate_post_l1 can block automatic assembly, instead of being
+        silently dropped like the employer data was."""
+        payload = _full_payload()
+        payload.elections = IntakeElections(large_foreign_gifts_over_100k=True)
+        state = self.router.populate_state(payload)
+        assert state.elections.large_foreign_gifts_over_100k is True
+        assert state.elections.section_6013g_election is False
+
+    def test_populate_state_seeds_871d_election(self):
+        payload = _full_payload()
+        payload.elections = IntakeElections(section_871d_election=True)
+        state = self.router.populate_state(payload)
+        assert state.elections.section_871d_election is True
+
+    def test_populate_state_seeds_banking_from_intake(self):
+        """Regression test: direct-deposit routing/account data typed at
+        intake must reach state.tax instead of being silently dropped —
+        previously the real 1040-NR PDF fields for this existed but nothing
+        wired the collected data to them."""
+        payload = _full_payload()
+        payload.banking = IntakeBanking(
+            direct_deposit=True,
+            routing_number="021000021",
+            account_number="000123456789",
+            account_type="checking",
+        )
+        state = self.router.populate_state(payload)
+        assert state.tax.direct_deposit is True
+        assert state.tax.routing_number == "021000021"
+        assert state.tax.account_number == "000123456789"
+        assert state.tax.account_type == "checking"
+
+    def test_populate_state_seeds_visa_subtype_and_prior_residency(self):
+        payload = _full_payload()
+        payload.residency.visa_subtype = "teacher_researcher"
+        payload.residency.prior_year_residency_status = "resident_alien"
+        state = self.router.populate_state(payload)
+        assert state.residency.visa_subtype == "teacher_researcher"
+        assert state.residency.prior_year_residency_status == "resident_alien"
+
+    def test_populate_state_seeds_prior_year_treaty_claim(self):
+        payload = _full_payload()
+        payload.income.prior_year_treaty_claim_total = 4500.0
+        state = self.router.populate_state(payload)
+        assert state.treaty.prior_year_treaty_claim_total == 4500.0
+
+    def test_populate_state_seeds_fica_confirmation_flags(self):
+        payload = _full_payload()
+        payload.fica = IntakeFICA(employer_attempted_refund=True, has_form_8316=True)
+        state = self.router.populate_state(payload)
+        assert state.fica.employer_attempted_refund is True
+        assert state.fica.has_form_8316 is True
+
+    def test_populate_state_seeds_extras_from_intake(self):
+        """Regression test: the extras step (13 real questions) must reach
+        state instead of the frontend's buildIntakePayload() dropping the
+        whole bucket before it's even sent."""
+        payload = _full_payload()
+        payload.extras = IntakeExtras(
+            filed_previous_federal_return=True,
+            made_estimated_federal_payments=True,
+            estimated_federal_payment_amount=500.0,
+            had_digital_assets=True,
+        )
+        state = self.router.populate_state(payload)
+        assert state.extras.filed_previous_federal_return is True
+        assert state.extras.made_estimated_federal_payments is True
+        assert state.extras.estimated_federal_payment_amount == 500.0
+        assert state.extras.had_digital_assets is True
+        assert state.extras.is_full_time_student is False  # untouched default

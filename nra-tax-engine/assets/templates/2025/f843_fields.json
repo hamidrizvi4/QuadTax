@@ -1,0 +1,17 @@
+{
+  "name": "topmostSubform[0].Page1[0].f1_2[0]",
+  "ssn_itin": "topmostSubform[0].Page1[0].f1_3[0]",
+  "address_line1": "topmostSubform[0].Page1[0].f1_6[0]",
+  "address_city_state_zip": "topmostSubform[0].Page1[0].f1_8[0]",
+  "period_from": "topmostSubform[0].Page1[0].f1_17[0]",
+  "period_to": "topmostSubform[0].Page1[0].f1_18[0]",
+  "line_1_amount_to_refund": "topmostSubform[0].Page1[0].f1_19[0]",
+  "line_3_tax_type": "topmostSubform[0].Page1[0].f1_1[0]",
+  "line_4_explanation_irc_section": "topmostSubform[0].Page2[0].f2_2[0]",
+  "line_5_employer_name": "topmostSubform[0].Page1[0].f1_15[0]",
+  "line_5_employer_ein": "topmostSubform[0].Page1[0].f1_11[0]",
+  "line_6_dates_withheld": "topmostSubform[0].Page1[0].f1_20[0]",
+  "line_7_explanation_text": "topmostSubform[0].Page2[0].ExplainWhy[0].f2_3[0]",
+  "signature_name": "topmostSubform[0].Page1[0].f1_2[0]",
+  "signature_phone": "topmostSubform[0].Page1[0].f1_16[0]"
+}

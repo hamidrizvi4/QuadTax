@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useTaxStore } from '@/store/taxStore';
-import { ChevronRight, ClipboardCheck, MapPin, Shield, CreditCard } from 'lucide-react';
+import { ChevronRight, ClipboardCheck, MapPin, Shield, CreditCard, AlertTriangle } from 'lucide-react';
 import { FormField, inputCls, selectCls } from '@/components/FormField';
 
 function Toggle({
@@ -73,7 +73,15 @@ export default function ContextPage() {
     updateFICA,
     banking,
     updateBanking,
+    elections,
+    updateElections,
   } = useTaxStore();
+
+  const hasOutOfScopeElection =
+    elections.section_6013g_election ||
+    elections.section_871d_election ||
+    elections.large_foreign_gifts_over_100k ||
+    elections.closer_connection_exception_claimed;
 
   const isNY = identity.us_state === 'NY';
 
@@ -236,6 +244,48 @@ export default function ContextPage() {
                   placeholder="12-3456789"
                 />
               </FormField>
+            </div>
+          )}
+        </section>
+
+        {/* ── Out-of-scope disclosures ── */}
+        <section className="space-y-3">
+          <SectionHeader
+            icon={AlertTriangle}
+            title="A Few Uncommon Situations"
+            subtitle="Rare for students, but each one requires a CPA — not automated filing"
+          />
+          <Toggle
+            label="Elected to be treated as a US tax resident (§6013)?"
+            sublabel="E.g. married to a US citizen/resident and elected joint resident filing."
+            value={elections.section_6013g_election}
+            onChange={(v) =>
+              updateElections({ section_6013g_election: v, section_6013h_election: v })
+            }
+          />
+          <Toggle
+            label="Electing to treat real property income as ECI (§871(d))?"
+            sublabel="A specific election on rental/real-estate income — not the same as the treaty exemptions above."
+            value={elections.section_871d_election}
+            onChange={(v) => updateElections({ section_871d_election: v })}
+          />
+          <Toggle
+            label="Received a gift or inheritance over $100,000 from abroad?"
+            sublabel="From a foreign person or estate this tax year — triggers Form 3520."
+            value={elections.large_foreign_gifts_over_100k}
+            onChange={(v) => updateElections({ large_foreign_gifts_over_100k: v })}
+          />
+          <Toggle
+            label="Claiming the Closer Connection Exception?"
+            sublabel="A separate test from the treaty exemptions above — requires Form 8840."
+            value={elections.closer_connection_exception_claimed}
+            onChange={(v) => updateElections({ closer_connection_exception_claimed: v })}
+          />
+          {hasOutOfScopeElection && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-900 leading-relaxed">
+              QuadTax's automated engine doesn't cover this situation — it needs a
+              professional preparer. You can still continue to see your other
+              calculations, but we won't be able to generate a mailable return.
             </div>
           )}
         </section>

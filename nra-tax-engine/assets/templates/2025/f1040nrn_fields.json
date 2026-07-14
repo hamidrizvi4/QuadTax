@@ -1,0 +1,14 @@
+{
+  "line_1a_dividends_30": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line1a[0].f1_7[0]",
+  "line_2c_interest_30": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line2c[0].f1_32[0]",
+  "line_5_royalties_30": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line5[0].f1_47[0]",
+  "line_11_gambling_30": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line11[0].f1_79[0]",
+  "line_12_scholarship_other_rate": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line12[0].f1_87[0]",
+  "line_12_scholarship_30": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line12[0].f1_86[0]",
+  "line_13_subtotal_other_rate": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line13[0].f1_92[0]",
+  "line_14_tax_10": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line14[0].f1_94[0]",
+  "line_14_tax_15": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line14[0].f1_95[0]",
+  "line_14_tax_30": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line14[0].f1_96[0]",
+  "line_14_tax_other_rate": "form1040-NR[0].Page1[0].Table_NatureOfIncome[0].Line14[0].f1_97[0]",
+  "line_15_tax_total": "form1040-NR[0].Page1[0].f1_99[0]"
+}

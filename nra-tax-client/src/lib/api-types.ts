@@ -277,6 +277,75 @@ export interface components {
             closer_connection_exception_claimed: boolean;
         };
         /**
+         * IntakeExtras
+         * @description Miscellaneous intake answers from the frontend's "extras" step.
+         */
+        IntakeExtras: {
+            /**
+             * Is Full Time Student
+             * @default false
+             */
+            is_full_time_student: boolean;
+            /**
+             * Is Degree Candidate
+             * @default false
+             */
+            is_degree_candidate: boolean;
+            /**
+             * Is Opt Cpt
+             * @default false
+             */
+            is_opt_cpt: boolean;
+            /**
+             * Had Digital Assets
+             * @default false
+             */
+            had_digital_assets: boolean;
+            /**
+             * Can Be Claimed As Dependent
+             * @default false
+             */
+            can_be_claimed_as_dependent: boolean;
+            /**
+             * Was Married On Last Day
+             * @default false
+             */
+            was_married_on_last_day: boolean;
+            /**
+             * Made Estimated Federal Payments
+             * @default false
+             */
+            made_estimated_federal_payments: boolean;
+            /**
+             * Estimated Federal Payment Amount
+             * @default 0
+             */
+            estimated_federal_payment_amount: number;
+            /**
+             * Made Estimated State Payments
+             * @default false
+             */
+            made_estimated_state_payments: boolean;
+            /**
+             * Filed Federal Extension
+             * @default false
+             */
+            filed_federal_extension: boolean;
+            /**
+             * Filed Previous Federal Return
+             * @description Schedule OI Item H — filed a 1040 in the prior tax year.
+             * @default false
+             */
+            filed_previous_federal_return: boolean;
+            /** Previous Return Year */
+            previous_return_year?: number | null;
+            /**
+             * Previous Return Type
+             * @default
+             */
+            previous_return_type: string;
+        };
+        /**
          * IntakeFICA
          * @description FICA-refund-claim context (Form 843 path).
          */
@@ -575,6 +644,7 @@ export interface components {
             fica?: components["schemas"]["IntakeFICA"];
             banking?: components["schemas"]["IntakeBanking"];
             elections?: components["schemas"]["IntakeElections"];
+            extras?: components["schemas"]["IntakeExtras"];
         };
         /**
          * IntakeResidency
@@ -613,6 +683,22 @@ export interface components {
              * @enum {string}
              */
             prior_year_residency_status: "nonresident_alien" | "resident_alien" | "none";
+            /**
+             * First Us Entry Date
+             * @description ISO date of the filer's first-ever US entry. Only used for arrival-year dual-status detection when first_us_arrival_year == tax_year (i.e. this is genuinely their first year here).
+             */
+            first_us_entry_date?: string | null;
+            /**
+             * Is Still In Us
+             * @description False if the filer left the US before the end of the tax year.
+             * @default true
+             */
+            is_still_in_us: boolean;
+            /**
+             * Intended Departure Date
+             * @description ISO date the filer left (or intends to leave) the US, when is_still_in_us is False. Used for departure-year dual-status detection.
+             */
+            intended_departure_date?: string | null;
         };
         /** OcrResult */
         OcrResult: {

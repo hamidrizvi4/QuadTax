@@ -72,6 +72,9 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "filing_status_single": True if ident.filing_status == "single" else False,
         "filing_status_mfs": True if ident.filing_status == "mfs" else False,
         "filing_status_qss": True if ident.filing_status == "qss" else False,
+        # Digital Assets question (top of page 1) — from the intake extras step.
+        "digital_assets_yes": state.extras.had_digital_assets,
+        "digital_assets_no": not state.extras.had_digital_assets,
         # Line 1a — total W-2 wages
         "line_1a_wages": _fmt_money(income.total_w2_wages),
         # Line 1k — treaty-exempt wages subtotal (sum across all wage-category benefits)
@@ -130,8 +133,20 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "line_32_total_payments": _fmt_money(tax.total_withholding_credits),
         # Line 33 — refund (positive) when payments > total tax
         "line_33_refund": _fmt_money(max(0.0, -float(tax.refund_or_owed))),
-        # Line 35a — direct deposit amount (echoes Line 33 unless filer opted out)
+        # Line 35a — amount of the overpayment refunded to the filer (by
+        # check or direct deposit — not conditioned on direct_deposit; that
+        # flag only controls whether 35b/c/d below get filled).
         "line_35a_direct_deposit_refund": _fmt_money(max(0.0, -float(tax.refund_or_owed))),
+        # Line 35b/c/d — direct deposit routing/account details, only when
+        # the filer actually requested direct deposit.
+        "line_35b_routing_number": tax.routing_number if tax.direct_deposit else "",
+        "line_35c_account_type_checking": bool(
+            tax.direct_deposit and tax.account_type == "checking"
+        ),
+        "line_35c_account_type_savings": bool(
+            tax.direct_deposit and tax.account_type == "savings"
+        ),
+        "line_35d_account_number": tax.account_number if tax.direct_deposit else "",
         # Line 37 — amount you owe
         "line_37_owed": _fmt_money(max(0.0, float(tax.refund_or_owed))),
         # Signature block

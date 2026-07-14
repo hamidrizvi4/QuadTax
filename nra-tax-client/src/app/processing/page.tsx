@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTaxStore } from '@/store/taxStore';
-import { submitReturn } from '@/lib/api';
-import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { submitReturn, HumanReviewRequiredError } from '@/lib/api';
+import { Loader2, AlertCircle, CheckCircle2, UserCheck } from 'lucide-react';
 
 const PIPELINE_STEPS = [
   { id: 'L1', label: 'Verifying travel history (I-94)', emoji: '🛂' },
@@ -21,6 +21,7 @@ export default function ProcessingPage() {
   const router = useRouter();
   const store = useTaxStore();
   const [error, setError] = useState<string | null>(null);
+  const [reviewReasons, setReviewReasons] = useState<string[] | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
@@ -64,6 +65,10 @@ export default function ProcessingPage() {
         setTimeout(() => router.push('/results'), 700);
       } catch (err: unknown) {
         clearInterval(interval);
+        if (err instanceof HumanReviewRequiredError) {
+          setReviewReasons(err.reasons);
+          return;
+        }
         const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
         setError(msg);
       }
@@ -73,6 +78,39 @@ export default function ProcessingPage() {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (reviewReasons) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mb-6">
+          <UserCheck className="w-10 h-10 text-amber-600" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900 mb-2">
+          This one needs a professional preparer
+        </h2>
+        <p className="text-slate-500 max-w-sm mb-4 text-sm leading-relaxed">
+          Your situation includes something QuadTax's automated engine doesn't
+          cover yet:
+        </p>
+        <ul className="text-left max-w-sm mb-8 space-y-2">
+          {reviewReasons.map((reason, i) => (
+            <li
+              key={i}
+              className="bg-white border border-amber-200 rounded-xl p-3 text-xs text-slate-700 leading-relaxed"
+            >
+              {reason}
+            </li>
+          ))}
+        </ul>
+        <button
+          onClick={() => router.push('/intake/context')}
+          className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-bold active:scale-95 transition-all"
+        >
+          Go Back & Edit
+        </button>
+      </div>
+    );
+  }
 
   if (error) {
     return (

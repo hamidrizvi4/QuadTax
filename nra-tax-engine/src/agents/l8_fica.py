@@ -53,6 +53,10 @@ class FicaAgent:
         current_state.fica.requires_form_843 = requires_843
         if requires_843 and "843" not in current_state.forms_required:
             current_state.forms_required.append("843")
+        # Form 8316 substantiates the employer-refusal claim and is always
+        # filed alongside 843 (see form_843.py docstring).
+        if requires_843 and "8316" not in current_state.forms_required:
+            current_state.forms_required.append("8316")
 
         # Mark finalized
         current_state.mark_layer_complete("L8")

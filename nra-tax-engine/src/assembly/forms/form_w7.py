@@ -12,6 +12,23 @@ if TYPE_CHECKING:
     from src.orchestrator.state import ReturnStateObject
 
 
+def _fmt_birth_date(iso_date: str | None) -> str:
+    """Convert an ISO ``YYYY-MM-DD`` date to the 8-character ``MMDDYYYY``
+    comb-field format the W-7 PDF's birth-date field expects (no separators —
+    the field is a fixed 8-cell comb field, so a 10-character ``MM/DD/YYYY``
+    string gets silently truncated by pypdf)."""
+    if not iso_date:
+        return ""
+    parts = iso_date.split("-")
+    if len(parts) != 3:
+        return iso_date
+    year, month, day = parts
+    return f"{month}{day}{year}"
+
+
+_REASON_LETTERS = ["a", "b", "c", "d", "e", "f", "g", "h"]
+
+
 def compute_field_map(state: "ReturnStateObject") -> dict:
     ident = state.identity
 
@@ -21,15 +38,20 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
     elif not (state.residency.exempt_visa_type or "").startswith(("F", "J", "M", "Q")):
         reason_code = "b"  # NRA filing a US tax return (generic)
 
+    is_renewal = bool((state.itin_eligibility or {}).get("is_renewal", False))
+
     return {
-        "reason_code": reason_code,
+        "reason_code": reason_code,  # kept for any consumer reading the raw letter
+        **{f"reason_{letter}": (letter == reason_code) for letter in _REASON_LETTERS},
+        "application_type_new": not is_renewal,
+        "application_type_renewal": is_renewal,
         "name_line1": f"{ident.first_name} {ident.last_name}".strip(),
         "name_at_birth": f"{ident.first_name} {ident.last_name}".strip(),
         "mailing_address_line1": ident.us_address_line1,
         "mailing_city_state_zip": f"{ident.us_city}, {ident.us_state} {ident.us_zip}".strip(", "),
         "foreign_address_line1": ident.foreign_address_line1,
         "foreign_address_country": ident.foreign_country,
-        "birth_date": ident.date_of_birth or "",
+        "birth_date": _fmt_birth_date(ident.date_of_birth),
         "country_of_birth": ident.foreign_country,
         "country_of_citizenship": ident.country_of_citizenship,
         "passport_number": ident.passport_number,

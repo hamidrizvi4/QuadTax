@@ -1,0 +1,22 @@
+{
+  "name": "name(s)",
+  "occupation": "occupation",
+  "ssn": "your ssn",
+  "1a": "aA",
+  "1g": "gA",
+  "1h": "hA",
+  "1i": "iA",
+  "1j": "jA",
+  "1k": "kA",
+  "1l": "lA",
+  "1m": "mA",
+  "1n": "1n2A",
+  "1o": "o dollarsA",
+  "1p": "p dollarsA",
+  "quarters_maintained_all_year": "quarters maintained",
+  "address_1": "Col A1 - address",
+  "city_1": "Col B1 - City",
+  "zip_1": "ZIP1",
+  "still_maintained_1": "Col E1 - box.0",
+  "days_in_ny": "days"
+}

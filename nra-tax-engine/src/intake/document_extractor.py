@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from src.agents._llm_safety import safe_parse
 from src.intake.ocr_parser import DocumentParser
+from src.llm_config import PRIMARY_MODEL, get_openai_client
 
 
 class W2Extracted(BaseModel):
@@ -69,8 +70,7 @@ class DocumentExtractor:
 
     def __init__(self, llm_client: Any = None):
         if llm_client is None:
-            from openai import OpenAI
-            self.llm_client = OpenAI()
+            self.llm_client = get_openai_client()
         else:
             self.llm_client = llm_client
         self.parser = DocumentParser()
@@ -78,7 +78,7 @@ class DocumentExtractor:
     def _parse(self, schema, system: str, text: str):
         return safe_parse(
             primary_client=self.llm_client,
-            primary_model="gpt-4o-2024-08-06",
+            primary_model=PRIMARY_MODEL,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": text}],
             response_format=schema,
         )

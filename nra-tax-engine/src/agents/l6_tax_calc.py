@@ -76,7 +76,17 @@ class TaxCalculationAgent:
         deduction_type = "none"
         if india_standard_deduction:
             year = load_year(2025)
-            deduction_amount = year.standard_deduction.for_status("single", india_treaty=True)
+            if current_state.extras.can_be_claimed_as_dependent:
+                # IRC §63(c)(5): a filer claimable as someone else's
+                # dependent gets a capped deduction, not the full amount —
+                # using the full amount would understate their tax owed.
+                deduction_amount = year.standard_deduction.for_dependent(
+                    "single",
+                    earned_income=float(current_state.income.total_w2_wages),
+                    india_treaty=True,
+                )
+            else:
+                deduction_amount = year.standard_deduction.for_status("single", india_treaty=True)
             deduction_type = "standard"
             net_eci = max(0.0, net_eci - deduction_amount)
 

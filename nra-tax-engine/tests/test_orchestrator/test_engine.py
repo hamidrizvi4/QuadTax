@@ -63,3 +63,54 @@ class TestTaxReturnEngine:
     def test_required_for_assembly_includes_l4(self):
         """Regression: L4 must be among the required-for-assembly layers."""
         assert "L4" in REQUIRED_LAYERS_FOR_ASSEMBLY
+
+
+class TestPhase3AMTInput:
+    """Regression test: AMT input previously approximated taxable income as
+    eci_taxable_total - exempt_amount_applied instead of using the
+    authoritative state.tax.taxable_income (available since L6 populates it
+    for the 1040-NR line-15 fix earlier this session)."""
+
+    def test_amt_uses_authoritative_taxable_income(self):
+        engine = TaxEngine()
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.filing_status = "single"
+        # Deliberately make the old approximation and the real figure
+        # disagree so the test actually distinguishes the two code paths.
+        state.income.eci_taxable_total = 999_999.0
+        state.treaty.exempt_amount_applied = 0.0
+        state.tax.taxable_income = 30_000.0
+        state.tax.eci_tax_liability = 2_000.0
+
+        engine._compute_phase3_addons(state)
+
+        # AMTCalculator.compute()'s taxable_income input flows straight into
+        # amti (with 0 preference items in this fixture) before the
+        # exemption is subtracted, so it's directly observable on state.amt.
+        assert state.amt["amti"] == 30_000.0
+
+
+class TestPhase3EstimatedTaxPenaltyInput:
+    """Regression test: total_withholding_credits (which includes estimated
+    payments lumped in) was passed as a single 'withholding' figure to the
+    old flat-stub penalty evaluator. The real quarterly calculation needs
+    withholding (spread evenly) and estimated payments (credited to the
+    final period) split apart, sourced from withholding_report."""
+
+    def test_estimated_payments_split_from_withholding(self):
+        engine = TaxEngine()
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.filing_status = "single"
+        state.tax.total_tax_liability = 10_000.0
+        state.tax.total_withholding_credits = 6_000.0
+        state.withholding_report = {"federal_estimated_payments": 4_000.0}
+
+        engine._compute_phase3_addons(state)
+
+        periods = state.estimated_tax_penalty["periods"]
+        assert len(periods) == 4
+        # Withholding-only portion (6000 - 4000 = 2000) spread evenly means
+        # each period is credited 500 from withholding; the estimated 4000
+        # should show up entirely in the final period's payment_credited.
+        assert periods[0]["payment_credited"] == 500.0
+        assert periods[-1]["payment_credited"] == 500.0 + 4_000.0

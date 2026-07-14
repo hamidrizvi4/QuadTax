@@ -53,6 +53,20 @@ class StandardDeduction(BaseModel):
         nra_default = self.nra_rules.get("nra_default", 0)
         return float(nra_default)
 
+    def for_dependent(
+        self, status: FilingStatus, earned_income: float, india_treaty: bool = False
+    ) -> float:
+        """IRC §63(c)(5): a filer who can be claimed as another taxpayer's
+        dependent has their standard deduction capped at the greater of a
+        fixed minimum or (earned income + a small addon), never exceeding
+        the regular amount for their status.
+        """
+        regular_amount = self.for_status(status, india_treaty=india_treaty)
+        minimum = float(self.nra_rules.get("dependent_minimum", 0))
+        addon = float(self.nra_rules.get("dependent_earned_income_addon", 0))
+        dependent_amount = max(minimum, float(earned_income) + addon)
+        return min(regular_amount, dependent_amount)
+
 
 class FICALimits(BaseModel):
     """Social Security and Medicare wage bases and rates."""

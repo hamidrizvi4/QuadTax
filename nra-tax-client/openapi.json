@@ -406,6 +406,87 @@
         "title": "IntakeElections",
         "description": "Tax elections / disclosures the user has previously made."
       },
+      "IntakeExtras": {
+        "properties": {
+          "is_full_time_student": {
+            "type": "boolean",
+            "title": "Is Full Time Student",
+            "default": false
+          },
+          "is_degree_candidate": {
+            "type": "boolean",
+            "title": "Is Degree Candidate",
+            "default": false
+          },
+          "is_opt_cpt": {
+            "type": "boolean",
+            "title": "Is Opt Cpt",
+            "default": false
+          },
+          "had_digital_assets": {
+            "type": "boolean",
+            "title": "Had Digital Assets",
+            "default": false
+          },
+          "can_be_claimed_as_dependent": {
+            "type": "boolean",
+            "title": "Can Be Claimed As Dependent",
+            "default": false
+          },
+          "was_married_on_last_day": {
+            "type": "boolean",
+            "title": "Was Married On Last Day",
+            "default": false
+          },
+          "made_estimated_federal_payments": {
+            "type": "boolean",
+            "title": "Made Estimated Federal Payments",
+            "default": false
+          },
+          "estimated_federal_payment_amount": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Estimated Federal Payment Amount",
+            "default": 0.0
+          },
+          "made_estimated_state_payments": {
+            "type": "boolean",
+            "title": "Made Estimated State Payments",
+            "default": false
+          },
+          "filed_federal_extension": {
+            "type": "boolean",
+            "title": "Filed Federal Extension",
+            "default": false
+          },
+          "filed_previous_federal_return": {
+            "type": "boolean",
+            "title": "Filed Previous Federal Return",
+            "description": "Schedule OI Item H \u2014 filed a 1040 in the prior tax year.",
+            "default": false
+          },
+          "previous_return_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Return Year"
+          },
+          "previous_return_type": {
+            "type": "string",
+            "title": "Previous Return Type",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IntakeExtras",
+        "description": "Miscellaneous intake answers from the frontend's \"extras\" step."
+      },
       "IntakeFICA": {
         "properties": {
           "employer_attempted_refund": {
@@ -750,6 +831,9 @@
           },
           "elections": {
             "$ref": "#/components/schemas/IntakeElections"
+          },
+          "extras": {
+            "$ref": "#/components/schemas/IntakeExtras"
           }
         },
         "additionalProperties": false,
@@ -809,6 +893,36 @@
             ],
             "title": "Prior Year Residency Status",
             "default": "none"
+          },
+          "first_us_entry_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Us Entry Date",
+            "description": "ISO date of the filer's first-ever US entry. Only used for arrival-year dual-status detection when first_us_arrival_year == tax_year (i.e. this is genuinely their first year here)."
+          },
+          "is_still_in_us": {
+            "type": "boolean",
+            "title": "Is Still In Us",
+            "description": "False if the filer left the US before the end of the tax year.",
+            "default": true
+          },
+          "intended_departure_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intended Departure Date",
+            "description": "ISO date the filer left (or intends to leave) the US, when is_still_in_us is False. Used for departure-year dual-status detection."
           }
         },
         "additionalProperties": false,

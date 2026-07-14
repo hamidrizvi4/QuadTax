@@ -1,8 +1,13 @@
-"""Form 2210 — Underpayment of Estimated Tax (worst-case stub).
+"""Form 2210 — Underpayment of Estimated Tax.
 
-For v1 the populator surfaces the underpayment amount as a worst-case
-penalty estimate; the IRS will compute the precise figure using §6621
-rates and assessment timing.
+line_17_total_penalty now comes from a real Part III regular-method
+calculation (four required installments, cumulative payments credited,
+interest on each period's outstanding balance for the days it was owed —
+see src/functions/estimated_tax_penalty.py) rather than a flat worst-case
+stub. The per-period breakdown is exposed via the underscore-prefixed
+_periods key for the narrative/API layer; the vendored PDF's remap only
+maps the six top-level lines that already existed, since a full Part III
+column-by-column PDF layout hasn't been verified against the real form yet.
 """
 
 from __future__ import annotations
@@ -36,4 +41,5 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "line_17_total_penalty": _fmt_money(penalty.get("penalty_amount", 0.0)),
         "_safe_harbor_met": penalty.get("safe_harbor_met", True),
         "_safe_harbor_reason": penalty.get("safe_harbor_reason", "Default safe harbor."),
+        "_periods": penalty.get("periods", []),
     }

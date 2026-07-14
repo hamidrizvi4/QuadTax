@@ -61,6 +61,7 @@ class SubstantialPresenceCalculator:
         days_present_current_year: int,
         days_present_minus_1: int,
         days_present_minus_2: int,
+        visa_subtype: str = "student",
     ) -> Dict[str, object]:
         """Run the full SPT evaluation pipeline and return a residency result.
 
@@ -83,6 +84,14 @@ class SubstantialPresenceCalculator:
                 during ``tax_year``.
             days_present_minus_1: Days present in ``tax_year - 1``.
             days_present_minus_2: Days present in ``tax_year - 2``.
+            visa_subtype: Distinguishes a J-1 "teacher_researcher" (2-year
+                exempt window) from a J-1 "student" (5-year window, the
+                default). No effect for F-1/M-1/Q-1, which always use the
+                5-year window regardless of this value. This is a
+                continuous-presence approximation of the real 2-of-6-prior-
+                calendar-years rule (IRC §7701(b)(5)(E)) — it does not model
+                gaps in US presence, matching the same simplifying
+                assumption the 5-year student rule already makes.
 
         Returns:
             A dictionary compatible with the ``ResidencyState`` model::
@@ -102,7 +111,9 @@ class SubstantialPresenceCalculator:
         )
 
         # Step 1: Exempt-Individual check
-        is_exempt = self._is_exempt_individual(visa_type, calendar_years_present)
+        is_exempt = self._is_exempt_individual(
+            visa_type, calendar_years_present, visa_subtype
+        )
 
         # If exempt, days count as zero → automatic nonresident_alien
         if is_exempt:
@@ -155,25 +166,37 @@ class SubstantialPresenceCalculator:
         return (tax_year - first_us_arrival_year) + 1
 
     @staticmethod
-    def _is_exempt_individual(visa_type: str, calendar_years_present: int) -> bool:
+    def _is_exempt_individual(
+        visa_type: str, calendar_years_present: int, visa_subtype: str = "student"
+    ) -> bool:
         """Determine if the individual is an Exempt Individual under §7701(b)(5).
 
         An individual on an F-1, J-1, M-1, or Q-1 student visa is exempt
         from the SPT for up to 5 calendar years from their first US arrival.
-        Once they exceed that window, they are no longer exempt and must
-        pass the SPT like any other alien.
+        A J-1 teacher/researcher instead gets a tighter 2-calendar-year
+        window (IRC §7701(b)(5)(E)) — visa_type alone ("J-1") cannot
+        distinguish the two, hence visa_subtype. Once the filer exceeds
+        their applicable window, they are no longer exempt and must pass
+        the SPT like any other alien.
 
         Args:
             visa_type: The visa category string (e.g. "F-1").
             calendar_years_present: Years since first arrival (inclusive).
+            visa_subtype: "teacher_researcher" selects the 2-year J-1 window;
+                anything else (including the default "student") uses the
+                5-year window.
 
         Returns:
             True if the individual qualifies as exempt.
         """
-        return (
-            visa_type in _EXEMPT_STUDENT_VISAS
-            and calendar_years_present <= _MAX_EXEMPT_YEARS
+        if visa_type not in _EXEMPT_STUDENT_VISAS:
+            return False
+        max_years = (
+            _MAX_J1_TEACHER_RESEARCHER_YEARS
+            if visa_type == "J-1" and visa_subtype == "teacher_researcher"
+            else _MAX_EXEMPT_YEARS
         )
+        return calendar_years_present <= max_years
 
     @staticmethod
     def _compute_spt_days(
@@ -235,6 +258,7 @@ class SubstantialPresenceCalculator:
         first_day_in_us_current_year: Optional[date] = None,
         last_day_in_us_current_year: Optional[date] = None,
         prior_visa_was_resident: bool = False,
+        visa_subtype: str = "student",
     ) -> Dict[str, object]:
         """Detect dual-status (mid-year transition between NRA and RA).
 
@@ -268,6 +292,7 @@ class SubstantialPresenceCalculator:
             days_present_current_year=days_present_current_year,
             days_present_minus_1=days_present_minus_1,
             days_present_minus_2=days_present_minus_2,
+            visa_subtype=visa_subtype,
         )
 
         result: Dict[str, object] = dict(base)

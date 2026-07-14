@@ -265,18 +265,19 @@ class MailingPackager:
             return None
 
         address = self.addresses["federal"]["form_843_fica_refund"]
+        fica_forms = ["843", "8316"] if "8316" in state.forms_required else ["843"]
         packet = PacketManifest(
             name="fica_843",
-            forms_in_order=["843"],
+            forms_in_order=fica_forms,
             mailing_address=address,
             has_payment=False,
         )
-        pdf_path = self._merge_pdfs(forms_dir, ["843"], output_dir / "packet_843.pdf")
+        pdf_path = self._merge_pdfs(forms_dir, fica_forms, output_dir / "packet_843.pdf")
         if pdf_path is not None:
             packet.pdf_output = str(pdf_path)
         else:
             manifest_path = self._merge_jsons(
-                forms_dir, ["843"], output_dir / "packet_843.json"
+                forms_dir, fica_forms, output_dir / "packet_843.json"
             )
             packet.json_output = str(manifest_path)
 
@@ -407,9 +408,9 @@ class MailingPackager:
             money_line = f"**FICA refund claim:** ${total_fica:,.2f}"
             extra_notes = [
                 "- Attach a copy of each W-2 showing the FICA withholding.",
-                "- Attach **Form 8316** (Information Regarding Request for Refund "
-                "of Social Security Tax) — the employer's statement that they will "
-                "not refund the tax directly.",
+                "- **Form 8316 is included in this packet, pre-filled** — sign and "
+                "date it before mailing. It's your own certification that your "
+                "employer has not refunded the tax, not a statement from them.",
                 "- Attach copies of your I-94 and visa stamp evidencing exempt status.",
                 "- This claim mails SEPARATELY from your 1040-NR — do NOT bundle.",
             ]

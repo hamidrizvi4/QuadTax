@@ -119,6 +119,86 @@ class TestSubstantialPresenceCalculator:
         assert res == 149
 
 
+class TestJ1TeacherResearcherWindow:
+    """Regression tests: a J-1 teacher/researcher gets a 2-calendar-year
+    exempt window (IRC §7701(b)(5)(E)), not the 5-year student window —
+    previously the frontend sent a non-standard "J-1-R" visa_type that
+    matched nothing, giving these filers ZERO exempt years (worse than
+    either window) and risking a wrongly-premature resident_alien
+    classification."""
+
+    def setup_method(self):
+        self.calc = SubstantialPresenceCalculator()
+
+    def test_j1_teacher_researcher_exempt_within_2_years(self):
+        # Arrived 2023, tax year 2024 -> 2 calendar years present. Exempt.
+        result = self.calc.evaluate_residency(
+            tax_year=2024,
+            visa_type="J-1",
+            visa_subtype="teacher_researcher",
+            first_us_arrival_year=2023,
+            days_present_current_year=365,
+            days_present_minus_1=365,
+            days_present_minus_2=0,
+        )
+        assert result["is_exempt_individual"] is True
+        assert result["years_in_exempt_status"] == 2
+
+    def test_j1_teacher_researcher_not_exempt_in_3rd_year(self):
+        """This is the exact bug: a 3rd-year J-1 researcher must lose
+        exemption (2-year window), unlike a 3rd-year J-1 STUDENT who is
+        still well within the 5-year window."""
+        # Arrived 2022, tax year 2024 -> 3 calendar years present.
+        result = self.calc.evaluate_residency(
+            tax_year=2024,
+            visa_type="J-1",
+            visa_subtype="teacher_researcher",
+            first_us_arrival_year=2022,
+            days_present_current_year=365,
+            days_present_minus_1=365,
+            days_present_minus_2=365,
+        )
+        assert result["is_exempt_individual"] is False
+        # No longer exempt -> falls through to real SPT arithmetic.
+        # 365 + 365//3 + 365//6 = 365 + 121 + 60 = 546 >= 183 -> resident.
+        assert result["status"] == "resident_alien"
+
+    def test_j1_student_subtype_unaffected_still_5_year_window(self):
+        """Default visa_subtype="student" (and any non-teacher_researcher
+        value) must preserve the existing 5-year J-1 student behavior —
+        this fix must not regress the far more common case."""
+        # Arrived 2022, tax year 2024 -> 3 calendar years present, well
+        # within the 5-year student window.
+        result = self.calc.evaluate_residency(
+            tax_year=2024,
+            visa_type="J-1",
+            first_us_arrival_year=2022,
+            days_present_current_year=365,
+            days_present_minus_1=365,
+            days_present_minus_2=365,
+        )
+        assert result["is_exempt_individual"] is True
+        assert result["status"] == "nonresident_alien"
+
+    def test_f1_visa_type_unaffected_by_teacher_researcher_subtype(self):
+        """visa_subtype only matters for J-1 — an F-1 filer must keep the
+        5-year window even if visa_subtype is somehow set to
+        teacher_researcher (defensive: F-1 has no teacher/researcher
+        category at all)."""
+        result = self.calc.evaluate_residency(
+            tax_year=2024,
+            visa_type="F-1",
+            visa_subtype="teacher_researcher",
+            first_us_arrival_year=2021,
+            days_present_current_year=365,
+            days_present_minus_1=365,
+            days_present_minus_2=365,
+        )
+        # 2021->2024 = 4 calendar years, within the 5-year F-1 window.
+        assert result["is_exempt_individual"] is True
+        assert result["years_in_exempt_status"] == 4
+
+
 class TestDualStatusDetection:
     """Phase 2: ``evaluate_residency_with_status_change`` arrival/departure paths."""
 

@@ -104,6 +104,12 @@ class NYAgent:
         ny_state.days_in_ny = residency.days_in_ny
         ny_state.nyc_resident = residency.nyc_resident
         ny_state.yonkers_resident = residency.yonkers_resident
+        # Raw intake counts already drive the allocation math above but were
+        # never written back to state, so IT-203-B (which needs to *display*
+        # these same figures) had nothing to read.
+        ny_state.ny_work_days = intake.get("ny_work_days", 0)
+        ny_state.total_work_days = intake.get("total_work_days", 0)
+        ny_state.abode_months_in_year = intake.get("abode_months_in_year", 0)
 
         ny_state.ny_source_wages = allocation.ny_source_wages
         ny_state.ny_source_1042s_gross = allocation.ny_source_1042s_gross
