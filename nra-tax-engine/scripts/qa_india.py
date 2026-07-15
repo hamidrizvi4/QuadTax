@@ -181,7 +181,7 @@ def main() -> int:
     print(f"  1040-NR line_12_deduction          = {f1040['line_12_deduction']!r}  (the $15k standard deduction)")
     print(f"  1040-NR line_15_taxable_income     = {f1040['line_15_taxable_income']!r}")
     print(f"  1040-NR line_16_tax                = {f1040['line_16_tax']!r}")
-    print(f"  1040-NR line_33_refund             = {f1040['line_33_refund']!r}")
+    print(f"  1040-NR line_34_overpaid           = {f1040['line_34_overpaid']!r}")
     sch_oi = compute_form("Schedule-OI", state)
     print(f"  Schedule-OI Item L treaty rows     = {sch_oi['item_L_treaty_rows']}")
 

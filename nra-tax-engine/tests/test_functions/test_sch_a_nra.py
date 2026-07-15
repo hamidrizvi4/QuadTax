@@ -4,6 +4,8 @@ from decimal import Decimal
 
 from src.functions.sch_a_nra import (
     SALT_CAP,
+    SALT_CAP_MFS,
+    SALT_CAP_SINGLE,
     choose_deduction,
     compute_sch_a_nra,
 )
@@ -21,14 +23,40 @@ class TestSchA:
         assert r.total == Decimal("6000")
         assert r.disallowed_items == []
 
-    def test_above_salt_cap_capped_at_10k(self):
+    def test_above_salt_cap_capped_at_40k_single(self):
+        # TY2025 OBBBA-raised cap is $40,000 for single/QSS (was a flat
+        # $10,000 pre-2025) — confirmed against the vendored PDF's own
+        # printed line 1b text ("smaller of line 1a or $40,000").
         r = compute_sch_a_nra(
-            state_income_tax_withheld=9000,
-            local_income_tax_withheld=4000,
+            filing_status="single",
+            state_income_tax_withheld=30000,
+            local_income_tax_withheld=15000,
         )
-        assert r.state_local_income_tax == SALT_CAP
-        assert r.salt_cap_bite == Decimal("3000")
-        assert r.total == SALT_CAP
+        assert SALT_CAP == SALT_CAP_SINGLE == Decimal("40000")
+        assert r.state_local_income_tax == SALT_CAP_SINGLE
+        assert r.salt_cap_bite == Decimal("5000")
+        assert r.total == SALT_CAP_SINGLE
+
+    def test_above_salt_cap_capped_at_20k_mfs(self):
+        # MFS gets half the single cap ($20,000), per the same printed
+        # line 1b text ("... ($20,000 if married filing separately)").
+        r = compute_sch_a_nra(
+            filing_status="mfs",
+            state_income_tax_withheld=15000,
+            local_income_tax_withheld=10000,
+        )
+        assert r.state_local_income_tax == SALT_CAP_MFS
+        assert r.salt_cap_bite == Decimal("5000")
+        assert r.total == SALT_CAP_MFS
+
+    def test_mfs_cap_does_not_affect_amount_under_20k(self):
+        r = compute_sch_a_nra(
+            filing_status="mfs",
+            state_income_tax_withheld=8000,
+            local_income_tax_withheld=5000,
+        )
+        assert r.state_local_income_tax == Decimal("13000")
+        assert r.salt_cap_bite == Decimal("0")
 
     def test_disallowed_items_flagged_not_added(self):
         r = compute_sch_a_nra(

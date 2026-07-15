@@ -127,7 +127,13 @@ class IntakeIncome(BaseModel):
     prior_year_treaty_claim_total: float = Field(
         default=0.0,
         ge=0.0,
-        description="For Schedule OI Item L — prior-year treaty exempt amount.",
+        description=(
+            "Display-only prior-year treaty exempt amount (Schedule OI's "
+            "TY2025 Item L column (c) actually asks for a number of "
+            "months, not a dollar figure — see TreatyState."
+            "prior_year_treaty_claim_total for detail; this value never "
+            "reaches the AcroForm)."
+        ),
     )
 
 
@@ -214,7 +220,7 @@ class IntakeExtras(BaseModel):
     filed_federal_extension: bool = False
     filed_previous_federal_return: bool = Field(
         default=False,
-        description="Schedule OI Item H — filed a 1040 in the prior tax year.",
+        description="Schedule OI Item I — filed a 1040 in the prior tax year.",
     )
     previous_return_year: Optional[int] = None
     previous_return_type: str = ""

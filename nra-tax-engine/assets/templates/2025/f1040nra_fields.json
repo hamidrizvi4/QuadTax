@@ -1,6 +1,8 @@
 {
+  "header_name": "form1040-NR[0].Page1[0].f1_1[0]",
+  "header_identifying_number": "form1040-NR[0].Page1[0].f1_2[0]",
   "line_1a_state_local_income_tax": "form1040-NR[0].Page1[0].Line1a_ReadOrder[0].f1_3[0]",
-  "line_1b_salt_cap_bite_note": "form1040-NR[0].Page1[0].f1_4[0]",
+  "line_1b_salt_cap_amount": "form1040-NR[0].Page1[0].f1_4[0]",
   "line_2_cash_gifts": "form1040-NR[0].Page1[0].Line2_ReadOrder[0].f1_5[0]",
   "line_3_noncash_gifts": "form1040-NR[0].Page1[0].f1_6[0]",
   "line_4_carryover": "form1040-NR[0].Page1[0].f1_7[0]",

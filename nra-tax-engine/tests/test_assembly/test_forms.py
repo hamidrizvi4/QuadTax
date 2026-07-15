@@ -65,6 +65,7 @@ def _build_china_art20c_state() -> ReturnStateObject:
     state.fica.incorrect_medicare_withheld = 435.0
     state.fica.requires_form_843 = True
 
+    state.tax.agi = 25000.0  # net_eci: $30,000 wages − $5,000 China Art 20(c) exemption
     state.tax.eci_tax_liability = 2762.0
     state.tax.fdap_tax_liability = 0.0
     state.tax.total_tax_liability = 2762.0
@@ -104,13 +105,37 @@ class TestForm1040NR:
         assert m["last_name"] == "Chen"
         assert m["identifying_number"] == "912345678"
         assert m["us_state"] == "MA"
-        assert m["line_1a_wages"] == "30000"
+        # Line 1a must be NET of the $5,000 treaty exemption per IRS
+        # instructions ("wages...exempt...under an income tax treaty
+        # should not be reported on line 1a"), not the gross $30,000 W-2
+        # figure — regression guard for a confirmed wrong-amount bug.
+        assert m["line_1a_wages"] == "25000"
         assert m["line_1k_treaty_exempt_wages"] == "5000"
+        # 1z = "Add lines 1a through 1h" — only 1a populated, so 1z == 1a.
+        assert m["line_1z_total_wages_net"] == "25000"
+        # Line 9 mirrors the authoritative AGI (line 10 adjustments unmodeled).
+        assert m["line_9_total_income"] == "25000"
+        assert m["line_11_agi"] == "25000"
+        assert m["line_11b_agi"] == "25000"  # page-2 carry-forward of line 11a
         assert m["line_16_tax"] == "2762"
+        # No AMT/FDAP in this fixture -> lines 17/23a/23d blank, not "0".
+        assert m["line_17_sch2_amt"] == ""
+        assert m["line_18_tax_and_amt"] == "2762"
+        assert m["line_22_tax_after_credits"] == "2762"
+        assert m["line_23a_fdap_tax"] == ""
+        assert m["line_23d_addl_tax_subtotal"] == ""
         assert m["line_24_total_tax"] == "2762"
         assert m["line_25a_w2_withholding"] == "4500"
-        assert m["line_33_refund"] == "1738"
+        assert m["line_25b_1099_withholding"] == ""
+        assert m["line_25d_subtotal"] == "4500"
+        assert m["line_25g_1042s_withholding"] == ""
+        assert m["line_33_total_payments"] == "4500"
+        assert m["line_34_overpaid"] == "1738"
         assert m["line_37_owed"] == ""  # zero amount → empty per IRS convention
+        assert m["line_38_estimated_tax_penalty"] == ""
+        # Line 8 ("Additional income from Schedule 1") has no state backing
+        # and must never be fabricated by (mis)reusing FDAP income.
+        assert "line_8_scholarship_taxable" not in m
         assert m["signature_occupation"] == "Graduate Student"
         # Filing status checkboxes
         assert m["filing_status_single"] is True
@@ -122,6 +147,42 @@ class TestForm1040NR:
         # Digital assets defaults to No.
         assert m["digital_assets_yes"] is False
         assert m["digital_assets_no"] is True
+
+    def test_amt_flows_from_state_amt_dict_not_state_tax(self):
+        """Regression guard: AMT lives on ``state.amt`` (a plain dict
+        populated by AMTCalculator), not ``state.tax`` — the previous code
+        read a nonexistent ``state.tax.amt_owed`` attribute via a ``hasattr``
+        guard that was always False, so AMT silently never reached the
+        1040-NR even when Form 6251 computed a real liability."""
+        state = _build_china_art20c_state()
+        state.amt = {"amti": 40000.0, "exemption": 30000.0, "amt_owed": 500.0, "binds": True}
+        m = compute("1040-NR", state)
+        assert m["line_17_sch2_amt"] == "500"
+        assert m["line_18_tax_and_amt"] == "3262"  # 2762 (line 16) + 500 (line 17)
+        assert m["line_22_tax_after_credits"] == "3262"
+        assert m["line_24_total_tax"] == "3262"  # 2762 total_tax_liability + 500 AMT
+
+    def test_fdap_tax_reported_on_line_23a_not_line_8(self):
+        """Regression guard for a confirmed double-count bug: FDAP income is
+        reported on Schedule NEC and must flow to 1040-NR line 23a (the
+        Schedule-NEC tax line), never onto line 8 ("Additional income from
+        Schedule 1") — a completely different, unrelated income category
+        with no state backing in this engine."""
+        state = _build_china_art20c_state()
+        state.income.fdap_taxable_total = 5000.0
+        state.tax.fdap_tax_liability = 700.0
+        state.tax.total_tax_liability = 2762.0 + 700.0
+        m = compute("1040-NR", state)
+        assert m["line_23a_fdap_tax"] == "700"
+        assert m["line_23d_addl_tax_subtotal"] == "700"
+        assert "line_8_scholarship_taxable" not in m
+        assert m["line_24_total_tax"] == "3462"
+
+    def test_estimated_tax_penalty_flows_to_line_38(self):
+        state = _build_china_art20c_state()
+        state.estimated_tax_penalty = {"penalty_amount": 42.0, "safe_harbor_met": False}
+        m = compute("1040-NR", state)
+        assert m["line_38_estimated_tax_penalty"] == "42"
 
     def test_digital_assets_yes_when_extras_flag_set(self):
         state = _build_china_art20c_state()
@@ -161,43 +222,128 @@ class TestScheduleOI:
         assert rows[0]["article"] == "20(c)"
         assert rows[0]["amount_this_year"] == 5000.0
         assert m["item_A_country_citizenship"] == "CN"
-        assert m["item_C_visa_type"] == "F-1"
-        assert m["item_G_days_current_year"] == 300
-        assert m["item_G_days_year_minus_1"] == 365
-        assert m["item_G_days_year_minus_2"] == 0
+        # Item E on the TY2025 AcroForm is visa type (was mislabeled "C" on
+        # older Schedule OI revisions — see schedule_oi.py's field-letter map).
+        assert m["item_E_visa_type"] == "F-1"
+        # Item H is the 3-year day-count table (was mislabeled "G").
+        assert m["item_H_days_current_year"] == 300
+        assert m["item_H_days_year_minus_1"] == 365
+        assert m["item_H_days_year_minus_2"] == 0
+        # Header must repeat the filer's name/TIN, like every attached schedule.
+        assert m["header_name"] == "Ming Chen"
+        assert m["header_identifying_number"] == "912345678"
 
-    def test_item_h_reflects_extras_filed_previous_return(self):
+    def test_item_i_reflects_extras_filed_previous_return(self):
+        """Item I (was mislabeled "H") is a real Yes/No checkbox *pair* on the
+        AcroForm (c1_6[0]/c1_6[1] are independent fields, not radio-group
+        kids) — a confident False must explicitly check the No box, not just
+        leave both blank (indistinguishable from unanswered)."""
         state = _build_china_art20c_state()
         state.extras.filed_previous_federal_return = True
         m = compute("Schedule-OI", state)
-        assert m["item_H_filed_1040_prior_year"] is True
+        assert m["item_I_filed_1040_prior_year_yes"] is True
+        assert m["item_I_filed_1040_prior_year_no"] is False
+
+        state.extras.filed_previous_federal_return = False
+        m = compute("Schedule-OI", state)
+        assert m["item_I_filed_1040_prior_year_yes"] is False
+        assert m["item_I_filed_1040_prior_year_no"] is True
+
+    def test_item_i_prior_return_detail_filled_when_yes(self):
+        state = _build_china_art20c_state()
+        state.extras.filed_previous_federal_return = True
+        state.extras.previous_return_year = 2023
+        state.extras.previous_return_type = "1040-NR"
+        m = compute("Schedule-OI", state)
+        assert m["item_I_prior_return_year_and_form"] == "2023 1040-NR"
 
     def test_elections_reflected_when_force_assembled(self):
-        """Items I/K/M mirror state.elections — only reachable in practice
-        via force_assembly=True since the human-review gate blocks assembly
-        whenever any of these is set."""
+        """§871(d) (Item M1) is the only one of these five election flags
+        with a live field on the current AcroForm — §6013, the >$100k
+        foreign-gift disclosure, and the closer-connection exception have
+        no Schedule OI field on the TY2025 revision at all (see module
+        docstring) and are only reachable in practice via force_assembly=True
+        since the human-review gate blocks assembly whenever any of these
+        is set; they're still surfaced informationally for that review."""
         state = _build_china_art20c_state()
         state.elections.section_6013g_election = True
         state.elections.section_871d_election = True
         state.elections.large_foreign_gifts_over_100k = True
         state.elections.closer_connection_exception_claimed = True
         m = compute("Schedule-OI", state)
-        assert m["item_I_6013_election"] is True
-        assert m["item_J_871d_election"] is True
-        assert m["item_K_large_foreign_gifts"] is True
-        assert m["item_M_closer_connection"] is True
+        assert m["item_M1_871d_election_first_year"] is True
+        assert m["_election_6013_reported"] is True
+        assert m["_large_foreign_gifts_reported"] is True
+        assert m["_closer_connection_reported"] is True
 
-    def test_prior_year_treaty_claim_on_first_row(self):
+    def test_prior_year_treaty_claim_on_first_displayed_row(self):
         state = _build_china_art20c_state()
         state.treaty.prior_year_treaty_claim_total = 4500.0
         m = compute("Schedule-OI", state)
         assert m["item_L_treaty_rows"][0]["amount_prior_years"] == 4500.0
 
-    def test_prior_year_resident_status_reflected(self):
+    def test_prior_year_treaty_claim_skips_excluded_india_row(self):
+        """If applied_benefits[0] is the excluded India 21(2) entry, the
+        prior-year total must land on the first row that actually gets
+        displayed (China), not silently disappear because index 0 in the
+        unfiltered list was skipped."""
+        state = _build_china_art20c_state()
+        state.treaty.prior_year_treaty_claim_total = 4500.0
+        state.treaty.applied_benefits = [
+            {
+                "country_iso2": "IN",
+                "country_name": "India",
+                "article_id": "21(2)",
+                "category": "student_personal_services",
+                "exempt_amount": 15000.0,
+            },
+        ] + state.treaty.applied_benefits
+        m = compute("Schedule-OI", state)
+        rows = m["item_L_treaty_rows"]
+        assert len(rows) == 1
+        assert rows[0]["country"] == "China (People's Republic of)"
+        assert rows[0]["amount_prior_years"] == 4500.0
+
+    def test_item_l_total_matches_1040nr_line_1k_wage_filter(self):
+        """Item L's (e) Total must equal 1040-NR line 1k exactly — the IRS
+        instructs filers to "enter this amount on line 1k... and nowhere
+        else." A scholarship-category benefit belongs in the Item L table
+        (for disclosure) but must NOT be counted in the (e) Total, since it
+        never nets against Line 1a wages."""
+        state = _build_china_art20c_state()
+        state.treaty.applied_benefits = [
+            {
+                "country_iso2": "CN",
+                "country_name": "China (People's Republic of)",
+                "article_id": "20(c)",
+                "category": "student_personal_services",
+                "exempt_amount": 5000.0,
+            },
+            {
+                "country_iso2": "CN",
+                "country_name": "China (People's Republic of)",
+                "article_id": "20(b)",
+                "category": "scholarship_fellowship",
+                "exempt_amount": 3000.0,
+            },
+        ]
+        m = compute("Schedule-OI", state)
+        assert len(m["item_L_treaty_rows"]) == 2
+        assert m["item_L_total_exempt_amount"] == 5000.0
+        oi_total = m["item_L_total_exempt_amount"]
+        nr_line_1k = float(compute("1040-NR", state)["line_1k_treaty_exempt_wages"])
+        assert oi_total == nr_line_1k
+
+    def test_prior_year_resident_status_is_informational_only(self):
+        """Pre-2022 Schedule OI had an Item E "were you a US resident in a
+        prior year?" checkbox; the TY2025 revision's Item E is a different
+        question (visa type) and no field anywhere asks this anymore, so
+        this value is surfaced only for the JSON-fallback audit view
+        (leading underscore -> never written to the real PDF)."""
         state = _build_china_art20c_state()
         state.residency.prior_year_residency_status = "resident_alien"
         m = compute("Schedule-OI", state)
-        assert m["item_E_prior_year_resident"] is True
+        assert m["_prior_year_resident_status_reported"] is True
 
 
 class TestScheduleNEC:
@@ -207,6 +353,11 @@ class TestScheduleNEC:
         assert m["line_14_tax_30"] == ""
         assert m["line_12_scholarship_other_rate"] == ""
         assert m["line_15_tax_total"] == ""
+        assert m["line_12_other_specify"] == ""
+        assert m["line_hdr_other_rate_pct"] == ""
+        # Header must still be populated even when there's no FDAP to report.
+        assert m["header_name"] == "Ming Chen"
+        assert m["header_identifying_number"] == "912345678"
 
     def test_with_fdap_routes_to_correct_column(self):
         state = _build_china_art20c_state()
@@ -216,8 +367,59 @@ class TestScheduleNEC:
         # F-1 → this form has no dedicated 14% column, so it lands in "Other rate".
         assert m["line_12_scholarship_other_rate"] == "5000"
         assert m["line_13_subtotal_other_rate"] == "5000"
-        assert m["line_14_tax_other_rate"] == "5000"
+        # Regression guard: line 14 is "line 13 * rate of tax at top of the
+        # column" — i.e. the TAX ($700 = $5,000 * 14%), not a repeat of the
+        # line 13 income figure. An earlier version of this module wrote
+        # "5000" here, which silently disagreed with line 15 (the sum of
+        # line 14) and would have overstated the FDAP tax due 30-fold if a
+        # preparer or the IRS actually multiplied line 13 by 14% themselves.
+        assert m["line_14_tax_other_rate"] == "700"
+        assert m["line_14_tax_30"] == ""
         assert m["line_15_tax_total"] == "700"
+        # Column (d)'s rate blank must carry the 14% figure the dollar
+        # amount in that column is actually taxed at.
+        assert m["line_hdr_other_rate_pct"] == "14"
+        assert "Scholarship" in m["line_12_other_specify"]
+
+    def test_non_fjmq_visa_routes_to_30_percent_column(self):
+        """A non-F/J/M/Q visa holder (e.g. H-1B) gets no §1441(b) scholarship
+        rate reduction — FDAP must land in the 30% column (c), not the
+        "Other rate" column, and line 13/14 must both be populated for that
+        column (regression guard: an earlier version of this module never
+        wired up line 13's 30% box at all, so it silently stayed blank even
+        though line 12's 30% box had a real dollar amount in it)."""
+        state = _build_china_art20c_state()
+        state.residency.exempt_visa_type = None
+        state.income.fdap_taxable_total = 1500.0
+        state.tax.fdap_tax_liability = 450.0  # 1500 * 30%
+        m = compute("Schedule-NEC", state)
+        assert m["line_12_scholarship_30"] == "1500"
+        assert m["line_13_subtotal_30"] == "1500"
+        assert m["line_14_tax_30"] == "450"
+        assert m["line_14_tax_other_rate"] == ""
+        assert m["line_15_tax_total"] == "450"
+        # No custom rate needed — 30% is the form's own printed column header.
+        assert m["line_hdr_other_rate_pct"] == ""
+        assert m["line_12_other_specify"] == "Other FDAP income"
+
+    def test_partial_treaty_exemption_uses_net_not_gross_fdap(self):
+        """When a treaty exempts only PART of the FDAP total, the dollar
+        figure entered on lines 12/13 must be the NET (post-treaty) taxable
+        amount consistent with the actual computed tax — not the gross
+        pre-treaty IncomeState.fdap_taxable_total. Regression guard: an
+        earlier version of this module used the gross figure directly,
+        which would overstate the reported income relative to the tax
+        actually assessed whenever a treaty partially offset FDAP."""
+        state = _build_china_art20c_state()
+        # Gross 1042-S FDAP is $8,000; a $5,000 treaty exemption on the
+        # scholarship_fellowship category leaves $3,000 net, taxed at 14%.
+        state.income.fdap_taxable_total = 8000.0
+        state.tax.fdap_tax_liability = 420.0  # 3000 * 14%, per l6_tax_calc.py
+        m = compute("Schedule-NEC", state)
+        assert m["line_12_scholarship_other_rate"] == "3000"
+        assert m["line_13_subtotal_other_rate"] == "3000"
+        assert m["line_14_tax_other_rate"] == "420"
+        assert m["line_15_tax_total"] == "420"
 
 
 class TestScheduleA:
@@ -236,9 +438,57 @@ class TestScheduleA:
             ],
         }
         m = compute("Schedule-A", state)
+        # No SALT cap bite in this fixture, so raw (1a) == capped (1b) == 1800.
         assert m["line_1a_state_local_income_tax"] == "1800"
+        assert m["line_1b_salt_cap_amount"] == "1800"
         assert m["line_8_total_itemized"] == "2000"
         assert m["_disallowed_items_warnings"][0].startswith("Mortgage")
+
+    def test_header_name_and_tin_filled(self):
+        """Regression guard: f1_1[0]/f1_2[0] (name + identifying number,
+        repeated at the top of every attached schedule) were completely
+        unmapped in an earlier version of this module."""
+        state = _build_china_art20c_state()
+        state.sch_a = {"state_local_income_tax": 500.0, "total": 500.0}
+        m = compute("Schedule-A", state)
+        assert m["header_name"] == "Ming Chen"
+        assert m["header_identifying_number"] == "912345678"
+
+    def test_line_1a_reports_raw_pretax_amount_not_capped_amount(self):
+        """Regression guard: line 1a must show the RAW pre-SALT-cap
+        state+local income tax paid; line 1b shows the capped amount that
+        actually flows into the line 8 total. An earlier version of this
+        module wrote the already-capped figure onto line 1a (understating
+        it whenever the cap bit) and wrote a free-text warning sentence
+        onto line 1b instead of the numeric capped amount."""
+        state = _build_china_art20c_state()
+        state.sch_a = {
+            "state_local_income_tax": 40000.0,  # capped (line 1b)
+            "salt_cap_bite": 5000.0,            # amount disallowed by the cap
+            "charitable_cash": 0.0,
+            "charitable_noncash": 0.0,
+            "casualty_disaster_loss": 0.0,
+            "other_itemized": 0.0,
+            "total": 40000.0,
+            "disallowed_items": [],
+        }
+        m = compute("Schedule-A", state)
+        assert m["line_1a_state_local_income_tax"] == "45000"  # 40000 + 5000 raw
+        assert m["line_1b_salt_cap_amount"] == "40000"
+        assert m["line_8_total_itemized"] == "40000"
+        assert m["_salt_cap_bite_note"] == "SALT cap reduced the deductible amount by $5,000"
+
+    def test_no_salt_cap_bite_leaves_note_blank(self):
+        state = _build_china_art20c_state()
+        state.sch_a = {
+            "state_local_income_tax": 3000.0,
+            "salt_cap_bite": 0.0,
+            "total": 3000.0,
+        }
+        m = compute("Schedule-A", state)
+        assert m["line_1a_state_local_income_tax"] == "3000"
+        assert m["line_1b_salt_cap_amount"] == "3000"
+        assert m["_salt_cap_bite_note"] == ""
 
 
 class TestForm8843:
@@ -465,7 +715,7 @@ class TestIndiaForm1040NR:
     def test_line_16_tax_and_refund(self):
         m = compute("1040-NR", _build_india_art21_2_state())
         assert m["line_16_tax"] == "1322"
-        assert m["line_33_refund"] == "2878"
+        assert m["line_34_overpaid"] == "2878"
 
     def test_schedule_oi_item_l_excludes_india_21_2(self):
         """India 21(2) is a deduction, not exempt income — Item L must omit it."""

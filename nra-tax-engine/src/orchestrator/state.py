@@ -187,10 +187,15 @@ class ResidencyState(BaseModel):
         default="none",
         description=(
             "Filer-reported residency status for the immediately preceding "
-            "tax year, from intake. Drives Schedule OI Item E disclosure "
-            "('were you a US resident in a prior year?') AND, when set to "
-            "'resident_alien', L1's prior_visa_was_resident input to "
-            "departure-year dual-status detection."
+            "tax year, from intake. When set to 'resident_alien', feeds "
+            "L1's prior_visa_was_resident input to departure-year "
+            "dual-status detection. NOTE: on pre-2022 Schedule OI revisions "
+            "this also drove Item E's 'were you a US resident in a prior "
+            "year?' disclosure; the TY2025 AcroForm's Item E is a "
+            "different question (current visa type/immigration status) "
+            "and has no field asking this anymore, so schedule_oi.py only "
+            "surfaces this value informationally (JSON-fallback audit "
+            "view), not on the actual PDF."
         ),
     )
 
@@ -440,10 +445,15 @@ class TreatyState(BaseModel):
         ge=0.0,
         description=(
             "Filer-reported treaty-exempt amount claimed in the prior tax "
-            "year, from intake — display-only, for Schedule OI Item L's "
-            "'amount claimed in prior years' column. Does not affect the "
-            "current year's exemption math (treaty caps are applied fresh "
-            "per tax year)."
+            "year, from intake — display-only. NOTE: the TY2025 Schedule OI "
+            "AcroForm's Item L column (c) asks for the *number of months* "
+            "claimed in prior tax years, not a dollar amount (that dollar "
+            "column existed on older Schedule OI revisions but was "
+            "replaced) — this value has no matching field on the current "
+            "PDF and is only surfaced in schedule_oi.py's JSON-fallback "
+            "audit view, on the first displayed treaty_rows entry. Does "
+            "not affect the current year's exemption math (treaty caps are "
+            "applied fresh per tax year)."
         ),
     )
 
@@ -740,7 +750,9 @@ class ExtrasState(BaseModel):
     none of those strings appear anywhere, so several of these genuinely
     have no PDF field to map to, not just an unwired one:
 
-    - filed_previous_federal_return -> Schedule OI Item H.
+    - filed_previous_federal_return -> Schedule OI Item I (was lettered
+      Item H on pre-2022 Schedule OI revisions; the TY2025 AcroForm's
+      "filed a US return in a prior year" question is Item I).
     - made_estimated_federal_payments / estimated_federal_payment_amount ->
       1040-NR line 26, via withholding_reconciler.
     - can_be_claimed_as_dependent -> gates the IRC §63(c)(5) capped
@@ -782,7 +794,7 @@ class ExtrasState(BaseModel):
     filed_federal_extension: bool = False
     filed_previous_federal_return: bool = Field(
         default=False,
-        description="Schedule OI Item H — filed a 1040 in the prior tax year.",
+        description="Schedule OI Item I — filed a 1040 in the prior tax year.",
     )
     previous_return_year: Optional[int] = None
     previous_return_type: str = ""

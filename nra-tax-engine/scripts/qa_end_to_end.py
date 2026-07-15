@@ -332,7 +332,7 @@ def main() -> int:
         "filing_status_single", "line_1a_wages", "line_1k_treaty_exempt_wages",
         "line_11_agi", "line_12_deduction", "line_15_taxable_income",
         "line_16_tax", "line_24_total_tax", "line_25a_w2_withholding",
-        "line_32_total_payments", "line_33_refund", "line_37_owed",
+        "line_33_total_payments", "line_34_overpaid", "line_37_owed",
     ):
         if k in f1040:
             print(f"  {k:<32} = {f1040[k]!r}")
@@ -341,8 +341,8 @@ def main() -> int:
     sch_oi = compute_form("Schedule-OI", state)
     for row in sch_oi.get("item_L_treaty_rows", []):
         print(f"  country={row['country']!r}  article={row['article']}  exempt this yr=${row['amount_this_year']:,.0f}")
-    print(f"  Days in US this year: {sch_oi['item_G_days_current_year']}")
-    print(f"  Visa: {sch_oi['item_C_visa_type']}")
+    print(f"  Days in US this year: {sch_oi['item_H_days_current_year']}")
+    print(f"  Visa: {sch_oi['item_E_visa_type']}")
 
     print("\nForm 8833 (Treaty disclosure under IRC §6114):")
     f8833 = compute_form("8833", state)
