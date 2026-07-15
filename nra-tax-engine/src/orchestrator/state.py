@@ -969,6 +969,15 @@ class ReturnStateObject(BaseModel):
         ),
     )
 
+    # Issue #5: Track failed layers for health-check consistency
+    failed_layers: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Layers that failed during processing (e.g., due to LLM confidence errors). "
+            "Used to detect silent failures where a layer appears complete but actually failed."
+        ),
+    )
+
     # ── Convenience methods ────────────────────────────────────────────
 
     def is_layer_complete(self, layer: str) -> bool:

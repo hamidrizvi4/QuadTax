@@ -68,10 +68,12 @@ LAYER_DEPENDENCIES: Dict[str, List[str]] = {
 }
 
 # Layers that must be present in ``completed_layers`` before the engine will
-# advance to assembly. L4 is treated as satisfied either by completing
-# ("L4") or by an explicit skip ("L4_Skipped") for resident-alien cases.
-# L9 (NY) is treated as satisfied by either "L9" or "L9_Skipped".
-REQUIRED_LAYERS_FOR_ASSEMBLY: List[str] = ["L1", "L3", "L4", "L6", "L7", "L8", "L9"]
+# advance to assembly. L4/L9 are treated as satisfied either by completing
+# ("L4"/"L9") or by an explicit skip ("L4_Skipped"/"L9_Skipped").
+REQUIRED_LAYERS_FOR_ASSEMBLY: List[str] = ["L1", "L3", "L4", "L4_Skipped", "L6", "L7", "L8", "L9", "L9_Skipped"]
+
+# Track failed layers to detect silent failures
+FAILED_LAYERS_FOR_REVIEW: List[str] = ["L4", "L9", "L6", "L7", "L8"]
 
 
 class TaxEngine:
@@ -164,6 +166,12 @@ class TaxEngine:
                 outputs={"error": str(exc)},
                 rationale=f"Confidence error in {layer_id}; flagged for human review.",
             )
+            # Issue #5: Track failed layers to detect silent failures
+            if layer_id not in state.failed_layers:
+                state.failed_layers.append(layer_id)
+            # For L4 specifically: ensure treaty is not marked eligible on confidence error
+            if layer_id == "L4":
+                state.treaty.is_eligible = False
             return state
 
         audit_record(
@@ -175,6 +183,11 @@ class TaxEngine:
             rationale=rationale,
         )
         validators_module.run_validator(state, layer_id)
+        # Issue #5: Track completion to ensure health-check consistency
+        if layer_id not in state.completed_layers:
+            state.completed_layers.append(layer_id)
+        if layer_id in state.failed_layers:
+            state.failed_layers.remove(layer_id)
         return state
 
     def _compute_phase3_addons(self, state: ReturnStateObject) -> None:
