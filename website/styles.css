@@ -1,0 +1,47 @@
+/* ---- Global ---- */
+body {font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f8f9fa; color:#212529;}
+a {color:#0d6efd;}
+a:hover {color:#0a58ca;}
+
+/* ---- Hero ---- */
+.hero {
+  background: linear-gradient(rgba(13,110,253,0.85), rgba(13,110,253,0.85)),
+              url('https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=2000');
+  background-size: cover;
+  background-position: center;
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #fff;
+  margin-top: 56px;
+}
+.hero h1 {font-size: 2.8rem; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.4);}
+.hero p {font-size: 1.25rem; text-shadow: 0 1px 2px rgba(0,0,0,0.3);}
+.hero .btn-lg {font-size: 1.1rem; padding: 0.75rem 1.5rem;}
+
+/* ---- Cards ---- */
+.card {border: none; border-radius: .5rem; transition: transform .2s ease-in-out, box-shadow .2s ease-in-out;}
+.card:hover {transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.12);}
+.card-body {padding: 2rem;}
+.card-body i {font-size: 2.5rem; margin-bottom: 1rem;}
+
+/* ---- Sections ---- */
+section {padding: 4rem 0;}
+section.bg-light {background: #f8f9fa;}
+
+/* ---- Accordion (FAQ) ---- */
+.accordion-button {font-weight: 600;}
+.accordion-body {font-size: 0.95rem;}
+
+/* ---- Footer ---- */
+footer {background: #0d6efd; color: #fff;}
+footer a {color: #fff; text-decoration: none;}
+footer a:hover {text-decoration: underline;}
+
+/* ---- Responsive tweaks ---- */
+@media (max-width: 768px) {
+  .hero h1 {font-size: 2.2rem;}
+  .hero p {font-size: 1.1rem;}
+}

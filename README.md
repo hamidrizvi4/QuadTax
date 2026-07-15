@@ -121,7 +121,8 @@ Contract sync: `cd nra-tax-client && npm run sync-api` regenerates `openapi.json
 
 ### Known limitations
 
-- **IRS PDF templates aren't vendored** (`nra-tax-engine/assets/templates/2025/` is absent — the dev environment's network policy blocks irs.gov). The engine falls back to structured JSON field-maps: every line computed and populated, just not flattened into the official PDF. Drop the year's fillable PDFs (`f1040nr.pdf`, `f1040nro/a/n.pdf`, `f8843.pdf`, `f8833.pdf`, `f843.pdf`, `fw7.pdf`, `f6251.pdf`, `f2210.pdf`, `f8316.pdf`) into that directory to switch on real PDF output.
+- **IRS PDF templates ARE vendored** for TY2025 (`nra-tax-engine/assets/templates/2025/` contains all 14 fillable PDFs + per-form `*_fields.json` remaps). The engine fills the real AcroForm fields — verified end-to-end for 1040‑NR, Schedule‑OI, 8843, IT‑203/IT‑203‑B/IT‑203‑D, 843, 8833, etc. The JSON field-map fallback only triggers if a template is missing for a future tax year (e.g. 2026) before IRS publishes it.
+- A small number of 1040‑NR lines are not yet mapped to AcroForm fields (e.g. some Schedule‑NEC cross-reference lines); those render blank on the official PDF and should be reviewed by a CPA before mailing.
 - Landing-page testimonials are illustrative personas drawn from the verified golden-fixture suite (labeled as such on the page).
 
 ---
