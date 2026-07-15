@@ -4,7 +4,9 @@
   "line_1_taxable_income": "topmostSubform[0].Page1[0].f1_4[0]",
   "line_4_amti": "topmostSubform[0].Page1[0].f1_26[0]",
   "line_5_exemption": "topmostSubform[0].Page1[0].f1_27[0]",
+  "line_6_less_exemption": "topmostSubform[0].Page1[0].f1_28[0]",
   "line_7_tmt_before_credits": "topmostSubform[0].Page1[0].f1_29[0]",
-  "line_9_regular_tax": "topmostSubform[0].Page1[0].f1_31[0]",
+  "line_9_tmt_after_ftc": "topmostSubform[0].Page1[0].f1_31[0]",
+  "line_10_regular_tax": "topmostSubform[0].Page1[0].f1_32[0]",
   "line_11_amt_owed": "topmostSubform[0].Page1[0].f1_33[0]"
 }

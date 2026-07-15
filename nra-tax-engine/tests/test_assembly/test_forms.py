@@ -495,10 +495,13 @@ class TestForm8843:
     def test_part_iii_populated_for_f1(self):
         state = _build_china_art20c_state()
         m = compute("8843", state)
-        assert m["part_I_name"] == "Ming Chen"
-        assert m["part_I_visa_type_current"] == "F-1"
+        assert m["part_I_first_name"] == "Ming"
+        assert m["part_I_last_name"] == "Chen"
+        assert m["part_I_line_1b_current_status"] == "F-1"
         assert m["_part_III_relevant"] is True
+        assert m["_part_II_relevant"] is False
         assert m["_part_IV_relevant"] is False
+        assert m["_part_V_relevant"] is False
 
     def test_line_4a_uses_raw_presence_not_spt_adjusted(self):
         """spt_days_current_year is 0 for a fully-exempt filer; line 4a must
@@ -522,16 +525,105 @@ class TestForm8843:
         assert m["part_III_line_11_visa_yr_minus_1"] == "F-1"  # 2024
         assert m["part_III_line_11_visa_yr_minus_2"] == ""  # 2023, pre-arrival
         assert m["part_III_line_11_visa_yr_minus_6"] == ""  # 2019, pre-arrival
+        # Part II's parallel grid must stay blank -- this filer is Part III.
+        assert m["part_II_line_7_visa_yr_minus_1"] == ""
 
     def test_line_12_exempt_more_than_5_years(self):
         state = _build_china_art20c_state()
         state.residency.years_in_exempt_status = 2
         m = compute("8843", state)
-        assert m["part_III_line_12_exempt_more_than_5_years"] is False
+        assert m["part_III_line_12_exempt_more_than_5_years_yes"] is False
+        assert m["part_III_line_12_exempt_more_than_5_years_no"] is True
 
         state.residency.years_in_exempt_status = 6
         m = compute("8843", state)
-        assert m["part_III_line_12_exempt_more_than_5_years"] is True
+        assert m["part_III_line_12_exempt_more_than_5_years_yes"] is True
+        assert m["part_III_line_12_exempt_more_than_5_years_no"] is False
+
+    def test_line_13_lpr_status_defaults_no_when_part_iii_relevant(self):
+        """No intake field collects LPR steps; Part III students should
+        still get an explicit 'No' box checked, not a blank/unanswered line."""
+        state = _build_china_art20c_state()
+        m = compute("8843", state)
+        assert m["part_III_line_13_applied_for_lpr_status_yes"] is False
+        assert m["part_III_line_13_applied_for_lpr_status_no"] is True
+
+    def test_part_ii_routes_j1_teacher_researcher(self):
+        """A J-1 teacher/researcher must populate Part II (lines 5-8), not
+        Part III -- routing is driven by visa_subtype, not visa_type alone."""
+        state = _build_china_art20c_state()
+        state.residency.exempt_visa_type = "J-1"
+        state.residency.visa_subtype = "teacher_researcher"
+        # years_in_exempt_status stays 2 (fixture default) -> first exempt
+        # year 2024, which is the yr_minus_1 slot in the 2019-2024 window.
+        m = compute("8843", state)
+        assert m["_part_II_relevant"] is True
+        assert m["_part_II_role"] == "teacher"
+        assert m["_part_III_relevant"] is False
+        assert m["part_I_line_1b_current_status"] == "J-1"
+        assert m["part_II_line_7_visa_yr_minus_1"] == "J-1"  # tax_year - 1
+        assert m["part_II_line_7_visa_yr_minus_6"] == ""  # pre-arrival
+        # Part III's parallel grid/lines must stay blank for a Part II filer.
+        assert m["part_III_line_11_visa_yr_minus_1"] == ""
+        assert m["part_III_line_12_exempt_more_than_5_years_yes"] is False
+        assert m["part_III_line_12_exempt_more_than_5_years_no"] is False
+        assert m["part_III_line_13_applied_for_lpr_status_yes"] is False
+        assert m["part_III_line_13_applied_for_lpr_status_no"] is False
+
+    def test_part_ii_routes_j1_trainee(self):
+        state = _build_china_art20c_state()
+        state.residency.exempt_visa_type = "J-1"
+        state.residency.visa_subtype = "trainee"
+        m = compute("8843", state)
+        assert m["_part_II_relevant"] is True
+        assert m["_part_II_role"] == "trainee"
+
+    def test_j1_student_subtype_routes_part_iii(self):
+        """A plain J-1 student (visa_subtype='student', the model default)
+        still routes to Part III, matching F-1/M-1/Q-1 students."""
+        state = _build_china_art20c_state()
+        state.residency.exempt_visa_type = "J-1"
+        state.residency.visa_subtype = "student"
+        m = compute("8843", state)
+        assert m["_part_II_relevant"] is False
+        assert m["_part_III_relevant"] is True
+
+    def test_line_8_exempt_2_of_preceding_6_years(self):
+        state = _build_china_art20c_state()
+        state.residency.exempt_visa_type = "J-1"
+        state.residency.visa_subtype = "teacher_researcher"
+        state.residency.years_in_exempt_status = 2
+        m = compute("8843", state)
+        assert m["part_II_line_8_exempt_2_of_6_yes"] is False
+        assert m["part_II_line_8_exempt_2_of_6_no"] is True
+
+        state.residency.years_in_exempt_status = 3
+        m = compute("8843", state)
+        assert m["part_II_line_8_exempt_2_of_6_yes"] is True
+        assert m["part_II_line_8_exempt_2_of_6_no"] is False
+
+    def test_line_1a_includes_entry_date_when_available(self):
+        state = _build_china_art20c_state()
+        state.residency.first_us_entry_date = "2023-08-15"
+        m = compute("8843", state)
+        assert m["part_I_line_1a_visa_and_entry_date"] == "F-1, entered 08/15/2023"
+
+    def test_line_1a_blank_entry_date_falls_back_to_visa_only(self):
+        state = _build_china_art20c_state()
+        state.residency.first_us_entry_date = None
+        m = compute("8843", state)
+        assert m["part_I_line_1a_visa_and_entry_date"] == "F-1"
+
+    def test_us_and_foreign_address_include_line2(self):
+        state = _build_china_art20c_state()
+        state.identity.us_address_line2 = "Apt 4B"
+        state.identity.foreign_address_line1 = "88 Nanjing Rd"
+        state.identity.foreign_address_line2 = "Unit 12"
+        state.identity.foreign_city = "Shanghai"
+        state.identity.foreign_country = "CN"
+        m = compute("8843", state)
+        assert "Apt 4B" in m["part_I_address_us_line1"]
+        assert "Unit 12" in m["part_I_address_foreign_line1"]
 
 
 class TestForm8833:
@@ -545,12 +637,137 @@ class TestForm8833:
         assert row["box_6_amount_exempted"] == 5000.0
         assert "§871(b)" in row["box_4_irc_provision_overridden"]
 
+    def test_addresses_populated_from_identity(self):
+        """Regression: box_1d/box_1e were previously left off the field map
+        entirely, so the real PDF's 'Address in country of residence' /
+        'Address in the United States' lines rendered blank."""
+        state = _build_china_art20c_state()
+        state.identity.foreign_address_line1 = "88 Nanjing Rd"
+        state.identity.foreign_city = "Shanghai"
+        state.identity.foreign_country = "CN"
+        m = compute("8833", state)
+        row = m["rows"][0]
+        assert "88 Nanjing Rd" in row["box_1d_address_foreign"]
+        assert "Shanghai" in row["box_1d_address_foreign"]
+        assert "123 Beacon St Apt 4" in row["box_1e_address_us"]
+        assert "Boston" in row["box_1e_address_us"]
+        assert "MA" in row["box_1e_address_us"]
+
+    def test_section_6114_box_checked_dual_resident_box_never_checked(self):
+        """This engine only ever discloses ordinary §6114 treaty positions,
+        never a §7701(b) dual-resident election, so the top checkbox pair
+        must be checked/unchecked accordingly on every row."""
+        state = _build_china_art20c_state()
+        m = compute("8833", state)
+        row = m["rows"][0]
+        assert row["box_check_6114"] == "/1"
+        assert row["box_check_dual_resident"] == "/Off"
+
+    def test_us_citizen_or_resident_box_reflects_residency_status(self):
+        """Regression: this checkbox was previously left unmapped. It must
+        track the actual residency determination, not a hardcoded value."""
+        state = _build_china_art20c_state()
+        state.residency.status = "nonresident_alien"
+        m = compute("8833", state)
+        assert m["rows"][0]["box_check_us_citizen_or_resident"] == "/Off"
+
+        state.residency.status = "resident_alien"
+        m = compute("8833", state)
+        assert m["rows"][0]["box_check_us_citizen_or_resident"] == "/1"
+
+    def test_line_5_reg_6114_1b_yes_checked_for_every_generated_row(self):
+        """A row only exists here because treaty_evaluator already
+        determined IRC §6114/Reg 301.6114-1(b) reporting is required (net of
+        the Notice 2010-21 routine-position exception) -- so Line 5 must
+        always read 'Yes', never blank/'No'."""
+        state = _build_china_art20c_state()
+        m = compute("8833", state)
+        row = m["rows"][0]
+        assert row["box_5_reg_6114_1b_yes"] == "/1"
+        assert row["box_5_reg_6114_1b_no"] == "/Off"
+
+    def test_line_6_explanation_includes_dollar_amount(self):
+        """Form 8833 has no standalone 'amount exempted' field -- the real
+        Line 6 instructions require the dollar amount to be part of the
+        written explanation. Regression: the amount used to be written to
+        its own isolated field (f1_13) instead."""
+        state = _build_china_art20c_state()
+        state.treaty.applied_benefits[0]["explanation"] = "Bare-bones explanation with no dollar figure."
+        state.treaty.applied_benefits[0]["exempt_amount"] = 5000.0
+        m = compute("8833", state)
+        row = m["rows"][0]
+        assert "$5,000" in row["box_5_explanation"]
+        assert row["box_5_explanation_rows"], "explanation must be split into line rows for the PDF"
+        joined = " ".join(r["text"] for r in row["box_5_explanation_rows"])
+        assert "$5,000" in joined
+
+    def test_line_6_explanation_wraps_across_at_most_25_single_line_fields(self):
+        """f1_12..f1_36 are 25 genuinely single-line (non-multiline) text
+        fields on the real PDF -- a long explanation must be word-wrapped
+        across them, not silently dumped unwrapped into one field."""
+        state = _build_china_art20c_state()
+        state.treaty.applied_benefits[0]["explanation"] = "word " * 400
+        m = compute("8833", state)
+        rows = m["rows"][0]["box_5_explanation_rows"]
+        assert 1 < len(rows) <= 25
+        for r in rows:
+            assert len(r["text"]) <= 95  # generous bound over the widest (f1_13..f1_36) slot
+
+    def test_line_6_saving_clause_note_appended_when_applicable_but_not_duplicated(self):
+        state = _build_china_art20c_state()
+        state.treaty.applied_benefits[0]["applies_after_saving_clause"] = True
+        state.treaty.applied_benefits[0]["explanation"] = "No mention of the S-word here."
+        m = compute("8833", state)
+        text = m["rows"][0]["box_5_explanation"]
+        assert "saving clause" in text.lower()
+
+        # When the source explanation already mentions the saving clause
+        # (as treaty_evaluator._build_explanation does), no addendum is
+        # appended on top of it.
+        state.treaty.applied_benefits[0]["explanation"] = (
+            "Article 20(c): exempts $5,000; saving-clause exception applies."
+        )
+        m = compute("8833", state)
+        text2 = m["rows"][0]["box_5_explanation"]
+        assert text2.count("saving-clause exception applies") == 1
+        assert "notwithstanding the treaty's saving clause" not in text2
+
+    def test_multiple_benefits_produce_independent_non_cross_contaminated_rows(self):
+        state = _build_china_art20c_state()
+        state.treaty.applied_benefits = [
+            {
+                "country_name": "China (People's Republic of)",
+                "article_id": "20(c)",
+                "category": "student_personal_services",
+                "explanation": "Wage exemption row.",
+                "exempt_amount": 5000.0,
+                "applies_after_saving_clause": False,
+                "requires_form_8833": True,
+            },
+            {
+                "country_name": "China (People's Republic of)",
+                "article_id": "20(b)",
+                "category": "scholarship_fellowship",
+                "explanation": "Scholarship exemption row.",
+                "exempt_amount": 3000.0,
+                "applies_after_saving_clause": False,
+                "requires_form_8833": True,
+            },
+        ]
+        m = compute("8833", state)
+        assert m["count"] == 2
+        row1, row2 = m["rows"]
+        assert row1["box_3_treaty_article"] == "20(c)"
+        assert row2["box_3_treaty_article"] == "20(b)"
+        assert "$5,000" in row1["box_5_explanation"] and "$3,000" not in row1["box_5_explanation"]
+        assert "$3,000" in row2["box_5_explanation"] and "$5,000" not in row2["box_5_explanation"]
+
 
 class TestForm843:
     def test_explanation_and_amounts(self):
         state = _build_china_art20c_state()
         m = compute("843", state)
-        assert m["line_1_amount_to_refund"] == 2295.0  # 1860 + 435
+        assert m["line_1_amount_to_refund"] == "2295"  # 1860 + 435, whole-dollar formatted
         assert m["line_3_tax_type"] == "FICA"
         assert "§3121(b)(19)" in m["line_4_explanation_irc_section"]
         assert "F-1" in m["line_7_explanation_text"]
@@ -582,6 +799,38 @@ class TestForm843:
         assert "confirmed in writing that it will not issue a refund" in m["line_7_explanation_text"]
 
 
+class TestForm8316:
+    """Form 8316's yes/no/do-not-know answers are fixed given QuadTax's
+    FICA-refund path (filing 843 at all presupposes the underlying facts —
+    see the module docstring), but they must be the *real* multi-state
+    radio-group export strings ('/1'/'/2'/'/3'), not bare Python bools —
+    field '5' in particular has a real third state ('/3' = Do not Know)
+    that a bool-plus-/_States_-fallback would never reach."""
+
+    def test_fixed_yes_no_dnk_answers_use_real_export_states(self):
+        state = _build_china_art20c_state()
+        m = compute("8316", state)
+        assert m["q_a_income_per_visa"] == "/1"  # Yes
+        assert m["q1_employer_repaid"] == "/2"  # No
+        assert m["q3_authorized_employer_claim"] == "/2"  # No
+        assert m["q5_employer_claimed"] == "/3"  # Do Not Know
+        assert m["q7_claimed_against_federal_tax"] == "/2"  # No
+        # None of the "if yes, show amount" lines apply since every
+        # underlying question is answered No/Do Not Know, not Yes.
+        assert m["q1_employer_repaid_amount"] == ""
+        assert m["q3_authorized_employer_claim_amount"] == ""
+        assert m["q5_employer_claimed_amount"] == ""
+        assert m["q7_claimed_against_federal_tax_amount"] == ""
+
+    def test_employer_name_and_phone_flow_through(self):
+        state = _build_china_art20c_state()
+        state.income.employer_name = "Boston University"
+        state.identity.daytime_phone = "617-555-0199"
+        m = compute("8316", state)
+        assert m["employer_name"] == "Boston University"
+        assert m["signature_phone"] == "617-555-0199"
+
+
 class TestFormW7:
     def test_reason_code_a_when_treaty_claim(self):
         state = _build_china_art20c_state()
@@ -589,9 +838,13 @@ class TestFormW7:
         assert m["reason_code"] == "a"
         assert m["passport_number"] == "E12345678"
         assert m["treaty_country_when_reason_a"] == "CN"
-        # Exactly one of the 8 reason checkboxes should be True.
+        assert m["treaty_article_when_reason_a"] == "20(c)"
+        # Reason a and reason h are BOTH true: the real W-7's printed
+        # instructions for box a are unconditional ("you must also check
+        # and complete box h"), verified against the vendored PDF's text.
         assert m["reason_a"] is True
-        for letter in "bcdefgh":
+        assert m["reason_h"] is True
+        for letter in "bcdefg":
             assert m[f"reason_{letter}"] is False
         assert m["application_type_new"] is True
         assert m["application_type_renewal"] is False
@@ -604,6 +857,37 @@ class TestFormW7:
         assert m["reason_f"] is True
         for letter in "abcdegh":
             assert m[f"reason_{letter}"] is False
+        # Reason f doesn't trigger box h (this engine always attaches W-7
+        # to a real 1040-NR, so the "claiming an exception" branch of box
+        # f's instructions — the only sub-case requiring box h — never
+        # applies).
+        assert m["treaty_country_when_reason_a"] == ""
+        assert m["treaty_article_when_reason_a"] == ""
+
+    def test_treaty_country_uses_the_specific_8833_benefit_not_scalar_primary(self):
+        """Regression test: a multi-article-treaty filer whose *primary*
+        (largest-exemption) TreatyState fields point at a different article
+        than the one actually requiring Form 8833 must still get the 8833
+        benefit's own country/article on the W-7, not the scalar fields."""
+        state = _build_china_art20c_state()
+        state.treaty.country = "IN"  # scalar "primary" fields deliberately mismatched
+        state.treaty.article_number = "21(2)"
+        state.treaty.applied_benefits = [
+            {
+                "country_iso2": "CN",
+                "article_id": "20(b)",
+                "requires_form_8833": False,  # larger exemption, but no 8833 needed
+            },
+            {
+                "country_iso2": "CN",
+                "article_id": "20(c)",
+                "requires_form_8833": True,  # smaller exemption, but THIS one needs 8833
+            },
+        ]
+        m = compute("W-7", state)
+        assert m["reason_code"] == "a"
+        assert m["treaty_country_when_reason_a"] == "CN"
+        assert m["treaty_article_when_reason_a"] == "20(c)"
 
     def test_renewal_flag_reflects_itin_eligibility(self):
         state = _build_china_art20c_state()
@@ -611,6 +895,56 @@ class TestFormW7:
         m = compute("W-7", state)
         assert m["application_type_new"] is False
         assert m["application_type_renewal"] is True
+        # Line 6e/6f: previously-received-ITIN flips to Yes and the prior
+        # ITIN (from identity.itin, "912345678" in the base fixture) is
+        # split into the real PDF's XXX-XX-XXXX comb groups.
+        assert m["previously_received_itin_no"] is False
+        assert m["previously_received_itin_yes"] is True
+        assert m["prior_itin_group1"] == "912"
+        assert m["prior_itin_group2"] == "34"
+        assert m["prior_itin_group3"] == "5678"
+        assert m["prior_itin_name_first"] == "Ming"
+        assert m["prior_itin_name_last"] == "Chen"
+
+    def test_first_application_leaves_prior_itin_fields_blank(self):
+        state = _build_china_art20c_state()
+        state.itin_eligibility = {"is_renewal": False}
+        m = compute("W-7", state)
+        assert m["previously_received_itin_no"] is True
+        assert m["previously_received_itin_yes"] is False
+        assert m["prior_itin_group1"] == ""
+        assert m["prior_itin_group2"] == ""
+        assert m["prior_itin_group3"] == ""
+        assert m["prior_itin_name_first"] == ""
+
+    def test_name_split_across_the_three_real_pdf_boxes(self):
+        """Regression test: line 1a is three separate boxes (First/Middle/
+        Last name) on the real PDF; the name must not be crammed into a
+        single field, which would leave the actual last-name box blank."""
+        state = _build_china_art20c_state()
+        state.identity.middle_initial = "Q"
+        m = compute("W-7", state)
+        assert m["first_name"] == "Ming"
+        assert m["middle_initial"] == "Q"
+        assert m["last_name"] == "Chen"
+        # Line 1b ("name at birth if different") has no backing data and
+        # must not be silently filled in with the current name.
+        assert "name_at_birth" not in m
+        assert "name_line1" not in m
+
+    def test_passport_id_document_checkbox_and_entry_date(self):
+        state = _build_china_art20c_state()
+        state.residency.first_us_entry_date = "2023-08-15"
+        m = compute("W-7", state)
+        assert m["id_doc_passport"] is True
+        assert m["us_entry_date"] == "08152023"
+        assert m["visa_type"] == "F-1"
+
+    def test_no_passport_number_leaves_id_document_checkbox_unset(self):
+        state = _build_china_art20c_state()
+        state.identity.passport_number = ""
+        m = compute("W-7", state)
+        assert m["id_doc_passport"] is False
 
 
 class TestForm6251:
@@ -629,6 +963,59 @@ class TestForm6251:
         state.tax.eci_tax_liability = 2762.0  # deliberately different
         m = compute("6251", state)
         assert m["line_1_taxable_income"] == "25000"
+
+    def test_line_9_and_10_not_swapped(self):
+        """Regression test: line 9 (Tentative minimum tax, after AMT FTC)
+        was being overwritten with regular_tax_for_amt, and line 10
+        (regular tax) was left entirely blank — a genuine line-swap bug
+        that also broke the printed line 11 = line 9 - line 10 math.
+
+        Since this engine has no AMT foreign tax credit computation, line 8
+        is blank/zero, so line 9 must equal line 7 (tentative_minimum_tax)
+        exactly; line 10 must carry the regular tax figure instead.
+        """
+        state = _build_china_art20c_state()
+        state.amt = {
+            "amti": 100000.0,
+            "exemption": 88100.0,
+            "tentative_minimum_tax": 3100.0,
+            "regular_tax_for_amt": 2762.0,
+            "amt_owed": 338.0,
+            "binds": True,
+        }
+        m = compute("6251", state)
+        assert m["line_7_tmt_before_credits"] == "3100"
+        assert m["line_9_tmt_after_ftc"] == "3100"
+        assert m["line_10_regular_tax"] == "2762"
+        assert m["line_11_amt_owed"] == "338"
+
+    def test_line_6_derived_from_amti_minus_exemption(self):
+        """Line 6 ('Subtract line 5 from line 4') isn't stored on AMTResult
+        directly but must be derived from amti/exemption, not left blank."""
+        state = _build_china_art20c_state()
+        state.amt = {
+            "amti": 100000.0,
+            "exemption": 88100.0,
+            "tentative_minimum_tax": 3094.0,
+            "regular_tax_for_amt": 2762.0,
+            "amt_owed": 332.0,
+            "binds": True,
+        }
+        m = compute("6251", state)
+        assert m["line_6_less_exemption"] == "11900"
+
+    def test_line_6_floors_at_zero_when_exemption_exceeds_amti(self):
+        state = _build_china_art20c_state()
+        state.amt = {
+            "amti": 50000.0,
+            "exemption": 88100.0,
+            "tentative_minimum_tax": 0.0,
+            "regular_tax_for_amt": 500.0,
+            "amt_owed": 0.0,
+            "binds": False,
+        }
+        m = compute("6251", state)
+        assert m["line_6_less_exemption"] == ""
 
 
 class TestForm2210:

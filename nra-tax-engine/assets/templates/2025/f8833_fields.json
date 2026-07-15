@@ -1,10 +1,91 @@
 {
   "box_1a_name": "topmostSubform[0].Page1[0].f1_1[0]",
   "box_1b_tin": "topmostSubform[0].Page1[0].f1_2[0]",
+  "box_1d_address_foreign": "topmostSubform[0].Page1[0].f1_4[0]",
+  "box_1e_address_us": "topmostSubform[0].Page1[0].f1_5[0]",
+  "box_check_6114": "topmostSubform[0].Page1[0].BulletedList1[0].Bullet1[0].c1_1[0]",
+  "box_check_dual_resident": "topmostSubform[0].Page1[0].BulletedList1[0].Bullet2[0].c1_2[0]",
+  "box_check_us_citizen_or_resident": "topmostSubform[0].Page1[0].c1_3[0]",
   "box_2_treaty_country": "topmostSubform[0].Page1[0].Lines1-2_ReadOrder[0].f1_6[0]",
   "box_3_treaty_article": "topmostSubform[0].Page1[0].Lines1-2_ReadOrder[0].f1_7[0]",
   "box_4_irc_provision_overridden": "topmostSubform[0].Page1[0].f1_8[0]",
-  "box_5_explanation": "topmostSubform[0].Page1[0].f1_12[0]",
-  "box_6_amount_exempted": "topmostSubform[0].Page1[0].f1_13[0]",
-  "saving_clause_exception_cite": "topmostSubform[0].Page1[0].f1_14[0]"
+  "box_5_reg_6114_1b_yes": "topmostSubform[0].Page1[0].c1_4[0]",
+  "box_5_reg_6114_1b_no": "topmostSubform[0].Page1[0].c1_4[1]",
+  "box_5_explanation_rows": [
+    {
+      "text": "topmostSubform[0].Page1[0].f1_12[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_13[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_14[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_15[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_16[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_17[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_18[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_19[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_20[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_21[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_22[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_23[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_24[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_25[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_26[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_27[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_28[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_29[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_30[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_31[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_32[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_33[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_34[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_35[0]"
+    },
+    {
+      "text": "topmostSubform[0].Page1[0].f1_36[0]"
+    }
+  ]
 }

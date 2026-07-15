@@ -89,6 +89,25 @@ class EstimatedTaxPenaltyResult:
     must_attach_form_2210: bool = False
     periods: List[InstallmentPeriod] = field(default_factory=list)
 
+    # Form 2210, Part I — computed unconditionally (not just when a penalty
+    # is ultimately owed), because lines 4/5/9 are themselves part of the
+    # "Do You Have To File Form 2210?" determination printed on page 1, and
+    # the PDF populator needs real values for them regardless of outcome.
+    line_4_current_year_tax: Decimal = ZERO
+    line_5_ninety_pct_current_year: Decimal = ZERO
+    # None when no prior-year tax figure was supplied (this engine currently
+    # collects none — see form_2210.py's comment on line 8), matching real
+    # Form 2210's own instruction that line 8 is only completed when you
+    # have a prior-year amount to compare against.
+    line_8_prior_year_max: Decimal | None = None
+    line_9_required_annual_payment: Decimal = ZERO
+
+    # Form 2210, Part III, Section A (lines 10-18) — the official
+    # column-to-column carryforward worksheet, one dict per payment period
+    # (a/b/c/d), only populated when no safe harbor is met (the section is
+    # only meaningful once you're actually figuring the penalty).
+    section_a: List[dict] = field(default_factory=list)
+
     def to_dict_floats(self) -> dict:
         return {
             "safe_harbor_met": self.safe_harbor_met,
@@ -96,6 +115,17 @@ class EstimatedTaxPenaltyResult:
             "penalty_amount": float(self.penalty_amount),
             "must_attach_form_2210": self.must_attach_form_2210,
             "periods": [p.to_dict_floats() for p in self.periods],
+            "line_4_current_year_tax": float(self.line_4_current_year_tax),
+            "line_5_ninety_pct_current_year": float(self.line_5_ninety_pct_current_year),
+            "line_8_prior_year_max": (
+                float(self.line_8_prior_year_max)
+                if self.line_8_prior_year_max is not None
+                else None
+            ),
+            "line_9_required_annual_payment": float(self.line_9_required_annual_payment),
+            "section_a": [
+                {k: float(v) for k, v in col.items()} for col in self.section_a
+            ],
         }
 
 
@@ -106,6 +136,65 @@ def _installment_due_dates(tax_year: int) -> List[date]:
         date(tax_year, 9, 15),
         date(tax_year + 1, 1, 15),
     ]
+
+
+def _section_a_worksheet(periods: List[InstallmentPeriod]) -> List[dict]:
+    """Form 2210, Part III, Section A, lines 10-18 — the printed
+    column-to-column carryforward worksheet (verified against the real
+    2025 f2210.pdf AcroForm: ``SectionATable[0].Line10[0]``..``Line18[0]``,
+    four widgets each for columns (a)-(d)).
+
+    This is deliberately NOT the same arithmetic as the running
+    ``underpayment_balance`` tracked per :class:`InstallmentPeriod` above
+    (which feeds the interest/penalty-amount calculation on line 19). The
+    two are related but genuinely different bookkeeping: Section A's line
+    17/18 carry only the *excess* forward column-to-column (an overpayment
+    in one column offsets the next column's shortfall before any new
+    underpayment accrues), whereas the penalty calculation needs the full
+    outstanding cumulative balance for each period to charge interest on.
+    Verified by hand-simulation that these diverge as soon as an
+    underpayment persists across more than one column — populating this
+    table from ``underpayment_balance`` directly would print numbers that
+    don't match what a human filling out the real paper form would get.
+    """
+    prev_overpayment = ZERO
+    prev_line16 = ZERO
+    prev_line17 = ZERO
+    columns: List[dict] = []
+
+    for i, p in enumerate(periods):
+        line10 = p.required_installment
+        line11 = p.payment_credited
+        line12 = prev_overpayment if i > 0 else ZERO
+        line13 = line11 + line12
+        line14 = (prev_line16 + prev_line17) if i > 0 else ZERO
+        line15 = max(ZERO, line13 - line14)
+        line16 = (line14 - line13) if line15 == ZERO else ZERO
+        if line10 >= line15:
+            line17 = line10 - line15
+            line18 = ZERO
+        else:
+            line17 = ZERO
+            line18 = line15 - line10
+
+        columns.append(
+            {
+                "line_10": line10,
+                "line_11": line11,
+                "line_12": line12,
+                "line_13": line13,
+                "line_14": line14,
+                "line_15": line15,
+                "line_16": line16,
+                "line_17": line17,
+                "line_18": line18,
+            }
+        )
+        prev_overpayment = line18
+        prev_line16 = line16
+        prev_line17 = line17
+
+    return columns
 
 
 def evaluate(

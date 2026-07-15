@@ -679,6 +679,167 @@ class TestFormPopulatorScheduleOIVendoredTemplate:
         assert fields["form1040-NR[0].Page1[0].c1_3[1]"].get("/V") == "/Off"
 
 
+class TestFormPopulator8843VendoredTemplate:
+    """End-to-end check that the real Form 8843 AcroForm PDF is filled
+    correctly against the real field structure (dumped from the widget
+    annotations' /AP/N export states, cross-checked against the printed
+    line text) — regression guard for a rigorous audit that found: Part II
+    (Teachers and Trainees) was never populated at all because routing
+    ignored ``visa_subtype`` and defaulted every J-1 filer to Part III;
+    the "first name and initial"/"last name" fields (f1_04/f1_05) were
+    collapsed into one combined-name field, leaving f1_05 blank; Line 1a
+    (f1_09, "type of visa and date you entered the US") was entirely
+    unmapped; and every Yes/No line only ever mapped the "Yes" checkbox
+    kid, so a computed "No" answer left both boxes blank instead of
+    checking "No"."""
+
+    def _templates_dir(self) -> Path:
+        return Path(__file__).resolve().parents[2] / "assets" / "templates" / "2025"
+
+    def _build_student_state(self) -> ReturnStateObject:
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.first_name = "Priya"
+        state.identity.middle_initial = "R"
+        state.identity.last_name = "Sharma"
+        state.identity.itin = "912345678"
+        state.identity.us_address_line1 = "123 Beacon St"
+        state.identity.us_city = "Boston"
+        state.identity.us_state = "MA"
+        state.identity.us_zip = "02115"
+        state.identity.foreign_address_line1 = "45 MG Road"
+        state.identity.foreign_city = "Mumbai"
+        state.identity.foreign_country = "IN"
+        state.identity.country_of_citizenship = "IN"
+        state.identity.passport_number = "N1234567"
+        state.identity.passport_country = "IN"
+
+        state.residency.exempt_visa_type = "F-1"
+        state.residency.visa_subtype = "student"
+        state.residency.first_us_entry_date = "2023-08-15"
+        state.residency.years_in_exempt_status = 2
+        state.residency.spt_days_current_year = 0
+        state.residency.days_present_current_year = 300
+        state.residency.days_present_year_minus_1 = 200
+        state.residency.days_present_year_minus_2 = 10
+        state.residency.is_exempt_individual = True
+        state.residency.status = "nonresident_alien"
+
+        state.forms_required = []
+        state.ready_for_assembly = True
+        return state
+
+    def _build_teacher_state(self) -> ReturnStateObject:
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.first_name = "Wen"
+        state.identity.last_name = "Li"
+        state.identity.itin = "923456789"
+
+        state.residency.exempt_visa_type = "J-1"
+        state.residency.visa_subtype = "teacher_researcher"
+        state.residency.first_us_entry_date = "2024-01-10"
+        state.residency.years_in_exempt_status = 2
+        state.residency.spt_days_current_year = 0
+        state.residency.days_present_current_year = 355
+        state.residency.days_present_year_minus_1 = 360
+        state.residency.is_exempt_individual = True
+        state.residency.status = "nonresident_alien"
+
+        state.forms_required = []
+        state.ready_for_assembly = True
+        return state
+
+    def _generate(self, state: ReturnStateObject) -> dict:
+        repo_templates = self._templates_dir()
+        out = tempfile.mkdtemp()
+        populator = FormPopulator(
+            templates_dir=str(repo_templates.parent), outputs_dir=out, tax_year=2025,
+        )
+        generated = populator.generate_filing_package(state)
+        pdf_path = next(p for p in generated if p.endswith("8843.pdf"))
+        fields = PdfReader(pdf_path).get_fields() or {}
+        return {k: v.get("/V") for k, v in fields.items()}
+
+    def test_part_iii_student_fills_part_iii_not_part_ii(self):
+        repo_templates = self._templates_dir()
+        if not (repo_templates / "f8843.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        values = self._generate(self._build_student_state())
+        P = "topmostSubform[0].Page1[0]."
+        assert values[f"{P}f1_04[0]"] == "Priya R"
+        assert values[f"{P}f1_05[0]"] == "Sharma"
+        assert values[f"{P}f1_06[0]"] == "912345678"
+        assert values[f"{P}f1_09[0]"] == "F-1, entered 08/15/2023"
+        assert values[f"{P}f1_10[0]"] == "F-1"
+        assert values[f"{P}f1_14[0]"] == "300"
+        assert values[f"{P}f1_15[0]"] == "200"
+        assert values[f"{P}f1_16[0]"] == "10"
+        # first exempt year 2024 (2025 - years_in_exempt_status(2) + 1) ->
+        # only the yr_minus_1 slot (f1_33) in Part III's line-11 grid fills.
+        assert values[f"{P}f1_33[0]"] == "F-1"
+        assert values[f"{P}f1_28[0]"] == ""
+        # Part II's parallel line-7 grid (f1_20..f1_25) must stay untouched.
+        assert values[f"{P}f1_25[0]"] == ""
+        # Line 12 "No" (years_in_exempt_status=2, not >5) and line 13 "No"
+        # (no LPR steps) must both resolve to their real checked states.
+        assert values[f"{P}c1_2[0]"] == "/Off"
+        assert values[f"{P}c1_2[1]"] == "/2"
+        assert values[f"{P}c1_3[0]"] == "/Off"
+        assert values[f"{P}c1_3[1]"] == "/2"
+        # Part II's line-8 checkbox pair must stay untouched (not relevant).
+        assert values[f"{P}c1_1[0]"] == "/Off"
+        assert values[f"{P}c1_1[1]"] == "/Off"
+
+    def test_part_ii_j1_teacher_researcher_fills_part_ii_not_part_iii(self):
+        """Regression guard: a J-1 teacher/researcher (visa_subtype=
+        'teacher_researcher') must land on Part II (lines 5-8), never
+        Part III -- the pre-fix code ignored visa_subtype and routed every
+        J-1 filer to Part III, silently dropping Part II entirely."""
+        repo_templates = self._templates_dir()
+        if not (repo_templates / "f8843.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        values = self._generate(self._build_teacher_state())
+        P = "topmostSubform[0].Page1[0]."
+        assert values[f"{P}f1_10[0]"] == "J-1"
+        # first exempt year 2024 -> only yr_minus_1 slot (f1_25) fills.
+        assert values[f"{P}f1_25[0]"] == "J-1"
+        assert values[f"{P}f1_20[0]"] == ""
+        # Line 8 "No" (years_in_exempt_status=2, not >2).
+        assert values[f"{P}c1_1[0]"] == "/Off"
+        assert values[f"{P}c1_1[1]"] == "/2"
+        # Part III must be entirely untouched for a Part II filer.
+        assert values[f"{P}f1_33[0]"] == ""
+        assert values[f"{P}c1_2[0]"] == "/Off"
+        assert values[f"{P}c1_2[1]"] == "/Off"
+        assert values[f"{P}c1_3[0]"] == "/Off"
+        assert values[f"{P}c1_3[1]"] == "/Off"
+
+    def test_line_12_yes_checks_real_yes_state_when_exempt_over_5_years(self):
+        repo_templates = self._templates_dir()
+        if not (repo_templates / "f8843.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        state = self._build_student_state()
+        state.residency.years_in_exempt_status = 6
+        values = self._generate(state)
+        P = "topmostSubform[0].Page1[0]."
+        assert values[f"{P}c1_2[0]"] == "/1"
+        assert values[f"{P}c1_2[1]"] == "/Off"
+
+    def test_part_iv_and_part_v_are_never_fabricated(self):
+        """No intake path collects athlete/medical-condition data anywhere
+        in ReturnStateObject; page 2's f2_01..f2_08 must stay unfilled."""
+        repo_templates = self._templates_dir()
+        if not (repo_templates / "f8843.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        values = self._generate(self._build_student_state())
+        for n in range(1, 9):
+            key = f"topmostSubform[0].Page2[0].f2_{n:02d}[0]"
+            assert values.get(key) in (None, ""), f"{key} should be blank"
+
+
 class TestFormPopulatorScheduleNECVendoredTemplate:
     """End-to-end check that the real Schedule NEC AcroForm PDF is filled
     with correct, internally-consistent values against the real field
@@ -987,6 +1148,27 @@ class TestFormPopulator8833MultiRow:
                 if v.get("/V") and str(v.get("/V")) not in ("/Off", "")
             }
 
+        def _line6_field_num(key: str) -> int | None:
+            leaf = key.rsplit(".", 1)[-1]  # e.g. "f1_14[0]"
+            if not leaf.startswith("f1_"):
+                return None
+            digits = leaf[len("f1_"):].split("[", 1)[0]
+            try:
+                n = int(digits)
+            except ValueError:
+                return None
+            return n if 12 <= n <= 36 else None
+
+        def _explanation_text(vals: dict) -> str:
+            # Line 6 (f1_12..f1_36) is a run of single-line text fields the
+            # populator word-wraps a single narrative across — reassemble it
+            # in field order to check content, since no one field holds the
+            # whole sentence.
+            numbered = sorted(
+                ((_line6_field_num(k), k) for k in vals if _line6_field_num(k) is not None),
+            )
+            return " ".join(str(vals[k]) for _, k in numbered)
+
         values_1 = _real_values(pdfs_8833[0])
         values_2 = _real_values(pdfs_8833[1])
 
@@ -998,7 +1180,319 @@ class TestFormPopulator8833MultiRow:
             f"cross-contaminated — saw {all_articles_seen}"
         )
 
-        all_amounts_seen = set()
-        for vals in (values_1, values_2):
-            all_amounts_seen.update(v for v in vals.values() if v in ("5000.0", "3000.0"))
-        assert all_amounts_seen == {"5000.0", "3000.0"}
+        # Form 8833 has no standalone "amount exempted" field — real Line 6
+        # instructions require the dollar amount to be part of the written
+        # explanation. Confirm each row's own amount lands in its own PDF's
+        # explanation text, and the other row's amount does NOT leak in.
+        text_1 = _explanation_text(values_1)
+        text_2 = _explanation_text(values_2)
+        assert "$5,000" in text_1 and "$3,000" not in text_1
+        assert "$3,000" in text_2 and "$5,000" not in text_2
+
+
+class TestFormPopulator8316VendoredTemplate:
+    """End-to-end check that the real Form 8316 AcroForm PDF is filled
+    correctly against the real widget structure (dumped from the widget
+    annotations' /AP/N export states, cross-checked against the printed
+    line text): fields 'A', '1', '3', '7' are Yes/No radio groups with real
+    export states /1=Yes, /2=No; field '5' is a Yes/No/Do-not-Know radio
+    group with a real third state /3 that a bool-plus-/_States_-fallback
+    (which defaults to '/1') would never reach."""
+
+    def _templates_dir(self) -> Path:
+        return Path(__file__).resolve().parents[2] / "assets" / "templates" / "2025"
+
+    def _build_state(self) -> ReturnStateObject:
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.first_name = "Ming"
+        state.identity.last_name = "Chen"
+        state.identity.itin = "912345678"
+        state.identity.daytime_phone = "617-555-0199"
+
+        state.residency.status = "nonresident_alien"
+        state.residency.exempt_visa_type = "F-1"
+        state.residency.is_exempt_individual = True
+
+        state.income.employer_name = "Boston University"
+        state.income.employer_ein = "04-1234567"
+        state.income.raw_ss_withheld = 1860.0
+        state.income.raw_medicare_withheld = 435.0
+
+        state.fica.is_exempt = True
+        state.fica.incorrect_ss_withheld = 1860.0
+        state.fica.incorrect_medicare_withheld = 435.0
+        state.fica.requires_form_843 = True
+        state.fica.employer_attempted_refund = True
+        state.fica.has_form_8316 = False
+
+        state.forms_required = ["843", "8316"]
+        state.ready_for_assembly = True
+        return state
+
+    def _generate(self, state: ReturnStateObject) -> str:
+        repo_templates = self._templates_dir()
+        out = tempfile.mkdtemp()
+        populator = FormPopulator(
+            templates_dir=str(repo_templates.parent), outputs_dir=out, tax_year=2025,
+        )
+        generated = populator.generate_filing_package(state)
+        return next(p for p in generated if p.endswith("8316.pdf"))
+
+    def _widget_export_states(self, pdf_path: str) -> dict:
+        """Map fully-qualified field name -> {kid export state: /AS value}
+        by walking the raw widget annotations, the same way the real
+        checkbox-resolution audit does — reader.get_fields()'s aggregated
+        /_States_/'/V' is not enough to confirm *which* radio kid actually
+        rendered as checked."""
+        reader = PdfReader(pdf_path)
+        page = reader.pages[0]
+        result: dict = {}
+        for annot in page["/Annots"]:
+            obj = annot.get_object()
+            if obj.get("/Subtype") != "/Widget":
+                continue
+            name_parts = []
+            cur = obj
+            while cur is not None:
+                t = cur.get("/T")
+                if t:
+                    name_parts.insert(0, str(t))
+                parent = cur.get("/Parent")
+                cur = parent.get_object() if parent is not None else None
+            fqname = ".".join(name_parts)
+            ap = obj.get("/AP")
+            states = list(ap["/N"].keys()) if ap and "/N" in ap else []
+            result.setdefault(fqname, {})
+            for s in states:
+                result[fqname][s] = str(obj.get("/AS"))
+        return result
+
+    def test_yes_no_and_do_not_know_radios_resolve_real_states(self):
+        repo_templates = self._templates_dir()
+        if not (repo_templates / "f8316.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        pdf_path = self._generate(self._build_state())
+        widgets = self._widget_export_states(pdf_path)
+
+        # Line A: Yes (/1) is checked, No (/2) kid stays /Off.
+        assert widgets["A"] == {"/1": "/1", "/2": "/Off"}
+        # Lines 1, 3, 7: No (/2) is checked, Yes (/1) kid stays /Off.
+        for line in ("1", "3", "7"):
+            assert widgets[line] == {"/1": "/Off", "/2": "/2"}, line
+        # Line 5 has a real third state -- Do not Know (/3) is checked,
+        # both Yes (/1) and No (/2) kids stay /Off. This is the state a
+        # bool-plus-/_States_-fallback would never reach (it only ever
+        # resolves to the first non-/Off state, "/1").
+        assert widgets["5"] == {"/1": "/Off", "/2": "/Off", "/3": "/3"}
+
+        fields = PdfReader(pdf_path).get_fields() or {}
+        values = {k: v.get("/V") for k, v in fields.items()}
+        assert values["A"] == "/1"
+        assert values["1"] == "/2"
+        assert values["3"] == "/2"
+        assert values["5"] == "/3"
+        assert values["7"] == "/2"
+
+    def test_amount_lines_stay_blank_and_employer_phone_flow_through(self):
+        repo_templates = self._templates_dir()
+        if not (repo_templates / "f8316.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        pdf_path = self._generate(self._build_state())
+        fields = PdfReader(pdf_path).get_fields() or {}
+        values = {k: v.get("/V") for k, v in fields.items()}
+
+        # Every "if yes, show amount" line stays blank since every
+        # underlying question is answered No/Do Not Know, not Yes.
+        for key in ("FillText01", "FillText03", "FillText05", "FillText10"):
+            assert values.get(key) in (None, ""), f"{key} should be blank"
+
+        assert values["FillText7"] == "Boston University"
+        assert values["FillText12"] == "617-555-0199"
+        # No intake field captures "convenient hours to call" anywhere in
+        # ReturnStateObject; FillText11 must stay genuinely unfilled, not
+        # fabricated.
+        assert values.get("FillText11") in (None, "")
+
+
+class TestFormPopulator843VendoredTemplate:
+    """End-to-end check that the real Form 843 AcroForm PDF is filled
+    correctly against the real field structure (dumped from the widget
+    annotations' /AP/N export states, cross-checked against the printed
+    line text via position-sorted extract_text) — regression guard for a
+    rigorous audit that found: the "type of tax" text ("FICA") was written
+    into f1_1[0], which is actually the free-text "specify" box for line
+    1 item q ("Other (specify)"), completely unrelated to the FICA claim
+    and with no corresponding checkbox ever checked; line 1's actual
+    reason checkbox (item e, c1_1[4]) was never checked at all; line 4's
+    "type of tax" checkbox (a Employment, c1_2[0]) was never checked; line
+    5's "type of return" checkbox (d 941, c2_4[0]) was never checked; the
+    employer's NAME was written into f1_15[0] ("Name and address shown on
+    return if different from above" — a taxpayer-identity field, not an
+    employer field, and one for which this engine never has real data
+    since it always uses one consistent identity); and the city/state/ZIP
+    address block (f1_8/f1_9/f1_10, three separate boxes) was collapsed
+    into a single combined string crammed entirely into the city box."""
+
+    def _templates_dir(self) -> Path:
+        return Path(__file__).resolve().parents[2] / "assets" / "templates" / "2025"
+
+    def _build_state(self) -> ReturnStateObject:
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.first_name = "Priya"
+        state.identity.middle_initial = "R"
+        state.identity.last_name = "Sharma"
+        state.identity.itin = "912345678"
+        state.identity.us_address_line1 = "123 Beacon St"
+        state.identity.us_address_line2 = "Apt 4B"
+        state.identity.us_city = "Boston"
+        state.identity.us_state = "MA"
+        state.identity.us_zip = "02115"
+        state.identity.daytime_phone = "617-555-1234"
+        state.identity.foreign_country = "IN"
+        state.identity.foreign_state_province = "Maharashtra"
+        state.identity.foreign_postal_code = "400001"
+        state.identity.foreign_address_line1 = "45 MG Road"
+        state.identity.foreign_city = "Mumbai"
+
+        state.residency.status = "nonresident_alien"
+        state.residency.exempt_visa_type = "F-1"
+        state.residency.is_exempt_individual = True
+
+        state.income.employer_name = "Acme University"
+        state.income.employer_ein = "12-3456789"
+        state.income.raw_ss_withheld = 1860.0
+        state.income.raw_medicare_withheld = 435.0
+
+        state.fica.is_exempt = True
+        state.fica.incorrect_ss_withheld = 1860.0
+        state.fica.incorrect_medicare_withheld = 435.0
+        state.fica.requires_form_843 = True
+        state.fica.employer_attempted_refund = True
+        state.fica.has_form_8316 = True
+
+        state.forms_required = ["843"]
+        state.ready_for_assembly = True
+        return state
+
+    def _generate(self, state: ReturnStateObject) -> dict:
+        repo_templates = self._templates_dir()
+        out = tempfile.mkdtemp()
+        populator = FormPopulator(
+            templates_dir=str(repo_templates.parent), outputs_dir=out, tax_year=2025,
+        )
+        generated = populator.generate_filing_package(state)
+        # NOTE: "843".pdf must NOT match Form 8843's output — endswith
+        # "843.pdf" would incorrectly match "..._8843.pdf" too.
+        pdf_path = next(p for p in generated if p.endswith("_843.pdf"))
+        fields = PdfReader(pdf_path).get_fields() or {}
+        return {k: v.get("/V") for k, v in fields.items()}
+
+    def test_identity_and_address_fields(self):
+        repo_templates = self._templates_dir()
+        if not (repo_templates / "f843.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        values = self._generate(self._build_state())
+        P = "topmostSubform[0].Page1[0]."
+        assert values[f"{P}f1_2[0]"] == "Priya R Sharma"
+        assert values[f"{P}f1_3[0]"] == "912345678"
+        assert values[f"{P}f1_6[0]"] == "123 Beacon St"
+        assert values[f"{P}f1_7[0]"] == "Apt 4B"
+        # City/State/ZIP are three SEPARATE boxes, not one combined string.
+        assert values[f"{P}f1_8[0]"] == "Boston"
+        assert values[f"{P}f1_9[0]"] == "MA"
+        assert values[f"{P}f1_10[0]"] == "02115"
+        assert values[f"{P}f1_11[0]"] == "12-3456789"
+        assert values[f"{P}f1_16[0]"] == "617-555-1234"
+        # No foreign address in play (US address present) -> foreign boxes
+        # and the "name/address if different from return" box stay blank.
+        assert values.get(f"{P}f1_12[0]") in (None, "")
+        assert values.get(f"{P}f1_13[0]") in (None, "")
+        assert values.get(f"{P}f1_14[0]") in (None, "")
+        assert values.get(f"{P}f1_15[0]") in (None, "")
+        # The employer's name/EIN must never land in the taxpayer-identity
+        # "different from return" box -- only the dedicated EIN box.
+        assert "Acme" not in (values.get(f"{P}f1_15[0]") or "")
+
+    def test_foreign_address_used_when_no_us_address_on_file(self):
+        repo_templates = self._templates_dir()
+        if not (repo_templates / "f843.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        state = self._build_state()
+        state.identity.us_address_line1 = ""
+        state.identity.us_address_line2 = ""
+        state.identity.us_city = ""
+        state.identity.us_state = ""
+        state.identity.us_zip = ""
+        values = self._generate(state)
+        P = "topmostSubform[0].Page1[0]."
+        assert values[f"{P}f1_6[0]"] == "45 MG Road"
+        assert values[f"{P}f1_8[0]"] == "Mumbai"
+        # Domestic state/ZIP boxes don't apply to a foreign address.
+        assert values.get(f"{P}f1_9[0]") in (None, "")
+        assert values.get(f"{P}f1_10[0]") in (None, "")
+        assert values[f"{P}f1_12[0]"] == "IN"
+        assert values[f"{P}f1_13[0]"] == "Maharashtra"
+        assert values[f"{P}f1_14[0]"] == "400001"
+
+    def test_reason_and_type_of_tax_checkboxes_are_checked_to_real_states(self):
+        """Line 1 item e, line 4 item a (Employment), and line 5 item d
+        (Form 941) must all resolve to their real checked export states --
+        never left /Off and never a wrong fallback state."""
+        repo_templates = self._templates_dir()
+        if not (repo_templates / "f843.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        values = self._generate(self._build_state())
+        P1 = "topmostSubform[0].Page1[0]."
+        P2 = "topmostSubform[0].Page2[0]."
+        # Line 1 item e ("withheld in error") -- real export state /5.
+        assert values[f"{P1}c1_1[4]"] == "/5"
+        # No sibling reason box is spuriously checked, e.g. item c
+        # ("excess" withholding, a different fact pattern) stays /Off.
+        assert values[f"{P1}c1_1[2]"] == "/Off"
+        # Line 4 item a (Employment tax) -- real export state /1.
+        assert values[f"{P1}c1_2[0]"] == "/1"
+        for kid in ("c1_3[0]", "c1_4[0]", "c1_5[0]", "c1_6[0]", "c1_7[0]", "c1_8[0]"):
+            assert values[f"{P1}{kid}"] == "/Off"
+        # Line 5 item d (Form 941) -- real export state /1.
+        assert values[f"{P2}c2_4[0]"] == "/1"
+        for kid in (
+            "c2_1[0]", "c2_2[0]", "c2_3[0]", "c2_5[0]", "c2_6[0]", "c2_7[0]",
+            "c2_8[0]", "c2_9[0]", "c2_10[0]", "c2_11[0]", "c2_12[0]", "c2_13[0]", "c2_14[0]",
+        ):
+            assert values[f"{P2}{kid}"] == "/Off"
+        # Line 7 (penalty/interest abatement reason) never applies to a
+        # FICA refund claim -- must stay entirely unchecked.
+        for kid in ("c2_15[0]", "c2_15[1]", "c2_15[2]", "c2_15[3]"):
+            assert values[f"{P2}{kid}"] == "/Off"
+        # f1_1[0] is the "Other (specify)" free-text line for item q, not a
+        # general "type of tax" box -- must stay blank since item q is
+        # never checked.
+        assert values.get(f"{P1}f1_1[0]") in (None, "")
+
+    def test_amount_and_explanation_text(self):
+        repo_templates = self._templates_dir()
+        if not (repo_templates / "f843.pdf").exists():
+            pytest.skip("IRS templates not vendored")
+
+        values = self._generate(self._build_state())
+        P1 = "topmostSubform[0].Page1[0]."
+        P2 = "topmostSubform[0].Page2[0]."
+        assert values[f"{P1}f1_17[0]"] == "01-01-2025"
+        assert values[f"{P1}f1_18[0]"] == "12-31-2025"
+        # Whole-dollar formatted (no trailing ".0"), matching every other
+        # form populator's money-field convention.
+        assert values[f"{P1}f1_19[0]"] == "2295"
+        assert values[f"{P2}f2_2[0]"] == "IRC §3121(b)(19)"
+        text = values[f"{P2}ExplainWhy[0].f2_3[0]"]
+        assert "confirmed in writing that it will not issue a refund" in text
+        # Line 3's 12 per-payment-date boxes have no backing per-paycheck
+        # data anywhere in state (only annual W-2 totals) -- must stay
+        # genuinely blank rather than fabricated.
+        for n in range(20, 32):
+            key = f"{P1}f1_{n}[0]"
+            assert values.get(key) in (None, ""), f"{key} should be blank"

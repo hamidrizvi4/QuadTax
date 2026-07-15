@@ -32,6 +32,18 @@ if TYPE_CHECKING:
 
 
 def compute_field_map(state: "ReturnStateObject") -> dict:
+    # NOTE on the real f8316.pdf AcroForm (confirmed by dumping the widget
+    # annotations' /AP/N export states, not the aggregated /_States_):
+    #   - Field "A" (line A, Yes/No) has real export states /1=Yes, /2=No.
+    #   - Fields "1", "3", "7" (lines 1/3/7, Yes/No) each have /1=Yes, /2=No.
+    #   - Field "5" (line 5, Yes/No/Do not Know) has /1=Yes, /2=No, /3=Do
+    #     not Know.
+    # These are multi-state radio groups, not booleans, so the literal
+    # export-state string is emitted directly here rather than a bare
+    # Python bool -- FormPopulator._format_for_acro only synthesizes an
+    # "on" state from a bool by falling back to the first non-/Off state
+    # in /_States_, which is wrong for any field (like "5") whose real
+    # "Yes" isn't literally the first listed state.
     return {
         "q_a_income_per_visa": "/1",  # Yes
         "q1_employer_repaid": "/2",  # No
@@ -46,6 +58,22 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         ),
         "q7_claimed_against_federal_tax": "/2",  # No
         "q7_claimed_against_federal_tax_amount": "",
-        "employer_name": state.income.employer_name,  # combined name+address field on the real PDF
+        # Line 9 ("Name and address of employer") is a single combined
+        # name+address field (FillText7) on the real PDF, but
+        # ReturnStateObject only carries IncomeState.employer_name -- there
+        # is no employer_address/street/city/state/zip field anywhere in
+        # state.py, so only the name is available to populate here. This is
+        # a genuine intake-data gap (not a bug in this mapping): fabricating
+        # an address would be worse than leaving it off, so only the name is
+        # written and the address portion of the line is left for the filer
+        # to fill in by hand before mailing.
+        "employer_name": state.income.employer_name,
         "signature_phone": state.identity.daytime_phone,
+        # The real PDF also has a "Convenient hours for us to call" field
+        # (FillText11) on the same line as the phone number. No intake
+        # field captures preferred callback hours anywhere in
+        # ReturnStateObject, so it is intentionally left unmapped/blank
+        # here rather than fabricated. (There is also no fillable field for
+        # "Your signature" or "Date" on this PDF revision -- those are
+        # blank ruled lines for a wet-ink signature, not AcroForm fields.)
     }
