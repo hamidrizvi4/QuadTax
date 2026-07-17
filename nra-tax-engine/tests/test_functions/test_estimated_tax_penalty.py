@@ -130,3 +130,81 @@ class TestQuarterlyPenaltyCalculation:
         full tax bill, as the 'penalty'."""
         r = evaluate(current_year_total_tax=5000, total_withholding=0, tax_year=2025)
         assert Decimal("0") < r.penalty_amount < Decimal("5000")
+
+
+class TestPartILinesAndSectionA:
+    """Regression guard for a confirmed dead-code bug: lines 4/5/8/9 and the
+    Section A worksheet were computed as local variables (and, for Section
+    A, via a real helper function) but never actually written onto the
+    returned EstimatedTaxPenaltyResult — every real Form 2210 PDF this
+    engine ever generated silently left Part I lines 4/5/8/9 and the entire
+    Section A worksheet blank, regardless of outcome."""
+
+    def test_lines_4_5_9_populated_even_when_safe_harbor_met(self):
+        """Part I lines are computed unconditionally per the form's own
+        "Do You Have To File Form 2210?" flowchart -- not only when a
+        penalty is ultimately owed."""
+        r = evaluate(current_year_total_tax=15000, total_withholding=13500)
+        assert r.safe_harbor_met is True
+        assert r.line_4_current_year_tax == Decimal("15000")
+        assert r.line_5_ninety_pct_current_year == Decimal("13500.000") or (
+            r.line_5_ninety_pct_current_year == Decimal("13500")
+        )
+        assert r.line_9_required_annual_payment == Decimal("13500.000") or (
+            r.line_9_required_annual_payment == Decimal("13500")
+        )
+
+    def test_line_8_none_without_prior_year_tax(self):
+        r = evaluate(current_year_total_tax=10000, total_withholding=2000, tax_year=2025)
+        assert r.line_8_prior_year_max is None
+
+    def test_line_8_and_line_9_use_prior_year_cap(self):
+        """Line 9 (required annual payment) is the smaller of line 5 (90%
+        of current year) and line 8 (smaller of the two prior-year
+        thresholds) -- verify line 8 is actually populated and actually
+        caps line 9 when it's the binding constraint."""
+        r = evaluate(
+            current_year_total_tax=10000,
+            total_withholding=2000,
+            prior_year_total_tax=7000,
+            prior_year_agi_over_150k=False,
+            tax_year=2025,
+        )
+        assert r.line_8_prior_year_max == Decimal("7000.00") or r.line_8_prior_year_max == Decimal(
+            "7000"
+        )
+        # line 5 would be 9000 (90% of 10000); line 8 (7000) is smaller and binds.
+        assert r.line_9_required_annual_payment == r.line_8_prior_year_max
+
+    def test_section_a_empty_when_safe_harbored(self):
+        r = evaluate(current_year_total_tax=15000, total_withholding=13500)
+        assert r.section_a == []
+
+    def test_section_a_populated_with_four_columns_when_no_safe_harbor(self):
+        r = evaluate(current_year_total_tax=10000, total_withholding=2000, tax_year=2025)
+        assert len(r.section_a) == 4
+        for column in r.section_a:
+            assert set(column.keys()) == {
+                "line_10",
+                "line_11",
+                "line_12",
+                "line_13",
+                "line_14",
+                "line_15",
+                "line_16",
+                "line_17",
+                "line_18",
+            }
+        # Column (a)'s line 10 is 25% of the required annual payment (90% of
+        # 10000 = 9000 / 4 = 2250), matching the first period's
+        # required_installment on `periods`.
+        assert r.section_a[0]["line_10"] == r.periods[0].required_installment
+
+    def test_to_dict_floats_serializes_new_fields(self):
+        r = evaluate(current_year_total_tax=10000, total_withholding=2000, tax_year=2025)
+        d = r.to_dict_floats()
+        assert d["line_4_current_year_tax"] == 10000.0
+        assert d["line_9_required_annual_payment"] == 9000.0
+        assert d["line_8_prior_year_max"] is None
+        assert len(d["section_a"]) == 4
+        assert all(isinstance(v, float) for v in d["section_a"][0].values())

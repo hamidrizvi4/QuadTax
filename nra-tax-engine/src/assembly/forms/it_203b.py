@@ -25,15 +25,28 @@ Line semantics (verified against the real form, not assumed):
          same as ``ny.ny_income_percentage`` (the blended AGI-level ratio
          used on IT-203 line 45), which also folds in 1042-S/FDAP
          allocation and can differ from the pure wage-day ratio.
+         Reproduces all three of ``allocate()``'s apportionment branches
+         (not just the day-ratio one) using ``ny.employer_in_ny``: when
+         the Schedule A employer isn't NY-based, ``allocate()`` zeroes out
+         NY-source wages regardless of the day ratio, so 1n must show 0
+         too or 1n × 1o would silently disagree with the real 1p amount.
     1o  Wages to be allocated = total_w2_wages.
     1p  NY-allocated wages, taken directly from ``ny.ny_source_wages``
         (independently computed by ``ny_source_allocator``) rather than
         recomputed as 1n × 1o here, to avoid rounding drift against the
         number that actually drives the tax calculation.
 
-Schedule B: living quarters maintained in NY. Schedule C (college tuition
-itemized deduction) has no backing intake data and is left entirely
-blank.
+Schedule B: living quarters maintained in NY. The address block is gated
+on ``abode_months_in_year > 0`` (months an NY abode — dorm or otherwise —
+was maintained), NOT ``days_in_ny`` (mere physical-presence day count,
+which is also nonzero for e.g. a filer who took a short NYC trip but
+never maintained living quarters there and would wrongly get an address
+row). Column E ("living quarters still maintained") has no dedicated
+intake field distinguishing "still maintains this specific NY address"
+from general US presence, so it is approximated with
+``residency.is_still_in_us`` (documented limitation — see
+``compute_field_map``). Schedule C (college tuition itemized deduction)
+has no backing intake data and is left entirely blank.
 """
 
 from __future__ import annotations
@@ -52,13 +65,15 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
     days_worked = int(ny.total_work_days)
     days_outside_ny = max(0, days_worked - int(ny.ny_work_days))
     nonworking_days = max(0, total_days - days_worked)
-    # Matches ny_source_allocator.allocate()'s exact formula so 1n truly
-    # reflects the ratio that produced ny.ny_source_wages (see docstring).
-    wage_pct = (
-        max(0.0, min(1.0, ny.ny_work_days / ny.total_work_days))
-        if ny.total_work_days > 0
-        else 1.0
-    )
+    # Matches ny_source_allocator.allocate()'s exact formula (all three
+    # branches, including the non-NY-employer case) so 1n truly reflects
+    # the ratio that produced ny.ny_source_wages (see docstring).
+    if not ny.employer_in_ny:
+        wage_pct = 0.0
+    elif ny.total_work_days > 0:
+        wage_pct = max(0.0, min(1.0, ny.ny_work_days / ny.total_work_days))
+    else:
+        wage_pct = 1.0
 
     field_map = {
         "name": f"{ident.first_name} {ident.last_name}".strip(),
@@ -90,10 +105,22 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
     if int(ny.abode_months_in_year) >= 12:
         field_map["quarters_maintained_all_year"] = "/Yes"
 
-    if int(ny.days_in_ny) > 0:
+    # Gate on abode_months_in_year (months an NY abode was maintained), not
+    # days_in_ny (mere physical-presence days) — a filer who only visited
+    # NY briefly with no living quarters there has days_in_ny > 0 but
+    # abode_months_in_year == 0 and must NOT get an address row here.
+    if int(ny.abode_months_in_year) > 0:
         field_map["address_1"] = ident.us_address_line1
         field_map["city_1"] = ident.us_city
         field_map["zip_1"] = ident.us_zip
+        # Column E ("living quarters still maintained for/by you") has no
+        # dedicated intake signal — the state model only tracks whether the
+        # filer is still physically in the US at all, not whether this
+        # specific NY address is still leased/occupied. is_still_in_us is
+        # used as the best available proxy (a filer who departed the US
+        # for good has, in every real intake scenario this engine models,
+        # also given up their NY housing) rather than fabricating a
+        # separate signal with no backing data.
         if state.residency.is_still_in_us:
             field_map["still_maintained_1"] = "/Yes"
 

@@ -296,9 +296,10 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "line_35d_account_number": tax.account_number if tax.direct_deposit else "",
         # Line 37 — amount you owe.
         "line_37_owed": _fmt_money(max(0.0, float(tax.refund_or_owed))),
-        # Line 38 — estimated tax penalty (Form 2210 worst-case estimate;
-        # see src/functions/estimated_tax_penalty.py / form_2210.py's own
-        # "line_17_total_penalty", which reads the same state dict).
+        # Line 38 — estimated tax penalty (Form 2210 regular-method
+        # calculation; see src/functions/estimated_tax_penalty.py /
+        # form_2210.py's own "line_19_total_penalty", which reads the same
+        # state dict).
         # Previously unmapped despite a real, already-computed state value.
         "line_38_estimated_tax_penalty": _fmt_money(penalty.get("penalty_amount", 0.0)),
         # Signature block

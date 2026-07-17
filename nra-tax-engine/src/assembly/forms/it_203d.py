@@ -14,7 +14,13 @@ form has no separate NY-source column):
     Line 4  Gifts to charity (fed Sch A line 19) = charitable_cash +
             charitable_noncash.
     Line 5  Casualty/theft losses (fed Sch A line 20) = casualty_disaster_loss.
-    Line 6-7  Job expenses / other misc deductions: not tracked — blank.
+    Line 6  Job expenses (fed Sch A line 27, TCJA-eliminated concept with no
+            NRA Schedule A analogue): not tracked — blank.
+    Line 7  Other misc deductions (fed Sch A line 28) = other_itemized —
+            mirrors schedule_a.py's own "line_7_other_itemized" mapping of
+            the same ``sch_a.other_itemized`` value on the federal NRA
+            Schedule A, so this NY line-item breakdown actually reconciles
+            with line 8's total instead of silently dropping this component.
     Line 8  = federal Schedule A line 29 total = sch_a.total.
     Line 9  NY disallows the federal SALT deduction — subtract back out
             the state/local income tax claimed on line 2/8.
@@ -55,6 +61,7 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         sch_a.get("charitable_noncash", 0.0)
     )
     casualty = float(sch_a.get("casualty_disaster_loss", 0.0))
+    other_itemized = float(sch_a.get("other_itemized", 0.0))
     line_8_total = float(sch_a.get("total", 0.0))
     line_10 = max(0.0, line_8_total - salt)
 
@@ -64,6 +71,7 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "line_2_taxes_paid": _fmt_money(salt),
         "line_4_charity": _fmt_money(charitable),
         "line_5_casualty": _fmt_money(casualty),
+        "line_7_other_itemized": _fmt_money(other_itemized),
         "line_8_total": _fmt_money(line_8_total),
         "line_9_salt_addback": _fmt_money(salt),
         "line_10": _fmt_money(line_10),
@@ -72,8 +80,8 @@ def compute_field_map(state: "ReturnStateObject") -> dict:
         "_note": (
             "Mirrors the federal Schedule A total with NY's required SALT "
             "addback (line 9); NY-only allowances (mortgage interest, "
-            "property tax — lines 3 and part of the medical/job-expense "
-            "lines) and the college tuition itemized deduction (line 11) "
-            "have no supporting intake data and are left blank."
+            "property tax — line 3 and the job-expense line 6) and the "
+            "college tuition itemized deduction (line 11) have no "
+            "supporting intake data and are left blank."
         ),
     }

@@ -1023,7 +1023,183 @@ class TestForm2210:
         state = _build_china_art20c_state()
         m = compute("2210", state)
         assert m["_safe_harbor_met"] is True
-        assert m["line_17_total_penalty"] == ""
+        assert m["line_19_total_penalty"] == ""
+
+    def test_part_i_lines_populated_from_penalty_dict(self):
+        """Lines 4/5/9 (and their Yes/No checkbox) come from the real
+        estimated_tax_penalty.py computation, not left blank -- regression
+        guard for a confirmed "computed but never mapped to the PDF" bug."""
+        state = _build_china_art20c_state()
+        state.estimated_tax_penalty = {
+            "safe_harbor_met": False,
+            "safe_harbor_reason": "No safe harbor met.",
+            "penalty_amount": 45.0,
+            "must_attach_form_2210": True,
+            "periods": [],
+            "line_4_current_year_tax": 2762.0,
+            "line_5_ninety_pct_current_year": 2485.8,
+            "line_8_prior_year_max": None,
+            "line_9_required_annual_payment": 2485.8,
+            "section_a": [],
+        }
+        m = compute("2210", state)
+        assert m["line_1_tax_after_credits"] == "2762"
+        assert m["line_4_current_year_tax"] == "2762"
+        assert m["line_5_ninety_pct_current_year"] == "2486"
+        assert m["line_8_prior_year_max"] == ""
+        assert m["line_9_required_annual_payment"] == "2486"
+        assert m["line_19_total_penalty"] == "45"
+
+    def test_line_6_excludes_estimated_payments(self):
+        """Line 6 ('Withholding taxes. Don't include estimated tax
+        payments') must exclude federal_estimated_payments even though
+        total_withholding_credits folds them in -- regression guard for a
+        confirmed overstated-withholding bug."""
+        state = _build_china_art20c_state()
+        state.tax.total_withholding_credits = 6000.0  # 4500 W-2 + 1500 estimated
+        state.withholding_report = {
+            **state.withholding_report,
+            "federal_estimated_payments": 1500.0,
+            "federal_total": 6000.0,
+        }
+        state.estimated_tax_penalty = {
+            "safe_harbor_met": False,
+            "safe_harbor_reason": "No safe harbor met.",
+            "penalty_amount": 10.0,
+            "must_attach_form_2210": True,
+            "periods": [],
+            "line_4_current_year_tax": 2762.0,
+            "line_5_ninety_pct_current_year": 2485.8,
+            "line_8_prior_year_max": None,
+            "line_9_required_annual_payment": 2485.8,
+            "section_a": [],
+        }
+        m = compute("2210", state)
+        # 6000 total credits - 1500 estimated payments = 4500 withholding-only.
+        assert m["line_6_withholding"] == "4500"
+        # Line 7 = line 4 - line 6 = 2762 - 4500, floored at zero.
+        assert m["line_7_line4_minus_line6"] == ""
+        # Required annual payment (2486) < withholding (4500) -> "No" checked.
+        assert m["checkbox_line9_more_than_line6_no"] is True
+        assert m["checkbox_line9_more_than_line6_yes"] is False
+
+    def test_checkbox_yes_when_required_payment_exceeds_withholding(self):
+        state = _build_china_art20c_state()
+        state.tax.total_withholding_credits = 1000.0
+        state.withholding_report = {
+            **state.withholding_report,
+            "federal_w2": 1000.0,
+            "federal_total": 1000.0,
+        }
+        state.estimated_tax_penalty = {
+            "safe_harbor_met": False,
+            "safe_harbor_reason": "No safe harbor met.",
+            "penalty_amount": 120.0,
+            "must_attach_form_2210": True,
+            "periods": [],
+            "line_4_current_year_tax": 2762.0,
+            "line_5_ninety_pct_current_year": 2485.8,
+            "line_8_prior_year_max": None,
+            "line_9_required_annual_payment": 2485.8,
+            "section_a": [],
+        }
+        m = compute("2210", state)
+        assert m["checkbox_line9_more_than_line6_no"] is False
+        assert m["checkbox_line9_more_than_line6_yes"] is True
+        # Line 7 = 2762 - 1000 = 1762 (not floored, genuinely positive here).
+        assert m["line_7_line4_minus_line6"] == "1762"
+
+    def test_section_a_worksheet_mapped_per_column(self):
+        """Section A (page 2, lines 10-18, columns a-d) is computed by
+        estimated_tax_penalty._section_a_worksheet() but was previously
+        never mapped to the PDF at all -- regression guard."""
+        state = _build_china_art20c_state()
+        state.estimated_tax_penalty = {
+            "safe_harbor_met": False,
+            "safe_harbor_reason": "No safe harbor met.",
+            "penalty_amount": 30.0,
+            "must_attach_form_2210": True,
+            "periods": [],
+            "line_4_current_year_tax": 2762.0,
+            "line_5_ninety_pct_current_year": 2485.8,
+            "line_8_prior_year_max": None,
+            "line_9_required_annual_payment": 2485.8,
+            "section_a": [
+                {
+                    "line_10": 621.45,
+                    "line_11": 0.0,
+                    "line_12": 0.0,
+                    "line_13": 0.0,
+                    "line_14": 0.0,
+                    "line_15": 0.0,
+                    "line_16": 0.0,
+                    "line_17": 621.45,
+                    "line_18": 0.0,
+                },
+                {
+                    "line_10": 621.45,
+                    "line_11": 0.0,
+                    "line_12": 0.0,
+                    "line_13": 0.0,
+                    "line_14": 621.45,
+                    "line_15": 0.0,
+                    "line_16": 621.45,
+                    "line_17": 0.0,
+                    "line_18": 0.0,
+                },
+                {
+                    "line_10": 621.45,
+                    "line_11": 1200.0,
+                    "line_12": 0.0,
+                    "line_13": 1200.0,
+                    "line_14": 1242.9,
+                    "line_15": 0.0,
+                    "line_16": 42.9,
+                    "line_17": 0.0,
+                    "line_18": 0.0,
+                },
+                {
+                    "line_10": 621.6,
+                    "line_11": 3300.0,
+                    "line_12": 0.0,
+                    "line_13": 3300.0,
+                    "line_14": 42.9,
+                    "line_15": 3257.1,
+                    "line_16": 0.0,
+                    "line_17": 0.0,
+                    "line_18": 2635.75,
+                },
+            ],
+        }
+        m = compute("2210", state)
+        assert m["section_a_line10_a"] == "621"
+        assert m["section_a_line17_a"] == "621"
+        assert m["section_a_line10_b"] == "621"
+        assert m["section_a_line16_b"] == "621"
+        assert m["section_a_line11_c"] == "1200"
+        assert m["section_a_line16_c"] == "43"
+        assert m["section_a_line11_d"] == "3300"
+        assert m["section_a_line18_d"] == "2636"
+
+    def test_section_a_blank_when_safe_harbor_met(self):
+        """No safe-harbor-broken computation means Section A was never
+        run (an empty list) -- must render blank, not fabricate zeros."""
+        state = _build_china_art20c_state()
+        state.estimated_tax_penalty = {
+            "safe_harbor_met": True,
+            "safe_harbor_reason": "Underpayment is below the $1,000 de minimis threshold.",
+            "penalty_amount": 0.0,
+            "must_attach_form_2210": False,
+            "periods": [],
+            "line_4_current_year_tax": 500.0,
+            "line_5_ninety_pct_current_year": 450.0,
+            "line_8_prior_year_max": None,
+            "line_9_required_annual_payment": 450.0,
+            "section_a": [],
+        }
+        m = compute("2210", state)
+        assert m["section_a_line10_a"] == ""
+        assert m["section_a_line18_d"] == ""
 
 
 def _build_india_art21_2_state() -> ReturnStateObject:
@@ -1165,6 +1341,69 @@ class TestFormIT203B:
         m = compute("IT-203-B", state)
         assert m["1n"] == "0.5000"
 
+    def test_1n_is_zero_when_employer_not_in_ny(self):
+        """Regression: employer_in_ny drives ny_source_allocator.allocate()'s
+        apportionment branch (it zeroes out NY-source wages for a non-NY
+        employer regardless of the day ratio) but was never persisted onto
+        NYTaxState, so 1n fell back to the plain day ratio even when 1p
+        (ny_source_wages) was actually 0 — an internally-inconsistent form
+        where 1n x 1o != 1p."""
+        state = _build_china_art20c_state()
+        state.ny.ny_work_days = 100
+        state.ny.total_work_days = 200
+        state.ny.employer_in_ny = False
+        state.ny.ny_source_wages = 0.0
+        m = compute("IT-203-B", state)
+        assert m["1n"] == "0.0000"
+        assert m["1p"] == "0"
+        # Real physical NY work days are unaffected by employer location —
+        # only the allocation ratio/dollar lines change.
+        assert m["1l"] == "100"
+
+    def test_1n_defaults_to_day_ratio_when_employer_in_ny_unset(self):
+        """employer_in_ny defaults to True (the typical F-1-at-NY-university
+        case), so existing state objects that never set it explicitly keep
+        the day-ratio behavior."""
+        state = _build_china_art20c_state()
+        state.ny.ny_work_days = 100
+        state.ny.total_work_days = 200
+        m = compute("IT-203-B", state)
+        assert m["1n"] == "0.5000"
+
+    def test_schedule_b_address_gated_on_abode_not_mere_presence_days(self):
+        """Regression: the address block was gated on days_in_ny (raw
+        physical-presence day count), so a filer who briefly visited NY
+        without ever maintaining living quarters there (abode_months_in_year
+        == 0) would incorrectly get an address row. It must be gated on
+        abode_months_in_year instead."""
+        state = _build_china_art20c_state()
+        state.ny.days_in_ny = 25
+        state.ny.abode_months_in_year = 0
+        m = compute("IT-203-B", state)
+        assert "address_1" not in m
+        assert "city_1" not in m
+        assert "zip_1" not in m
+        assert "still_maintained_1" not in m
+        # days_in_ny is still reported on its own line regardless.
+        assert m["days_in_ny"] == "25"
+
+    def test_schedule_b_address_populated_when_abode_maintained(self):
+        state = _build_china_art20c_state()
+        state.ny.days_in_ny = 0  # e.g. abode leased but filer barely visited
+        state.ny.abode_months_in_year = 6
+        m = compute("IT-203-B", state)
+        assert m["address_1"] == "123 Beacon St Apt 4"
+        assert m["city_1"] == "Boston"
+        assert m["zip_1"] == "02115"
+
+    def test_schedule_b_still_maintained_checkbox_omitted_after_departure(self):
+        state = _build_china_art20c_state()
+        state.ny.abode_months_in_year = 6
+        state.residency.is_still_in_us = False
+        m = compute("IT-203-B", state)
+        assert "address_1" in m
+        assert "still_maintained_1" not in m
+
 
 class TestFormIT203:
     def test_identity_filing_status_and_wage_lines(self):
@@ -1176,10 +1415,43 @@ class TestFormIT203:
         assert m["your_first_name"] == "Ming"
         assert m["your_last_name"] == "Chen"
         assert m["filing_status"] == "/1 Single"
-        assert m["line_1_federal"] == "30000"
+        # Line 1 federal must be NET of the $5,000 China Art 20(c) wage
+        # treaty exemption ($30,000 - $5,000), matching Form 1040-NR line
+        # 1a exactly for this same fixture (see
+        # test_line_1_matches_1040nr_line_1a_wages_net_of_treaty below) —
+        # NOT the gross $30,000 W-2 figure a prior version of this module
+        # reported here.
+        assert m["line_1_federal"] == "25000"
         assert m["line_1_ny"] == "25000"
+        # Line 31 (NY AGI) is unaffected — it's read directly from the
+        # authoritative ``state.ny.ny_agi``, not derived from line 1.
         assert m["line_31_federal"] == "30000"
         assert m["line_31_ny"] == "25000"
+
+    def test_line_1_matches_1040nr_line_1a_wages_net_of_treaty(self):
+        """IT-203 line 1's Federal column must equal 1040-NR line 1a
+        exactly — both are the same "wages reported on the federal
+        return" figure, and the IRS requires treaty-exempt wages to be
+        excluded from line 1a, not included and backed out elsewhere."""
+        state = _build_china_art20c_state()
+        it203_line1 = compute("IT-203", state)["line_1_federal"]
+        nr_line_1a = compute("1040-NR", state)["line_1a_wages"]
+        assert it203_line1 == nr_line_1a == "25000"
+
+    def test_line_16_nets_scholarship_treaty_exemption(self):
+        state = _build_china_art20c_state()
+        state.income.fdap_taxable_total = 2000.0
+        state.treaty.applied_benefits.append(
+            {
+                "country_iso2": "CN",
+                "country_name": "China (People's Republic of)",
+                "article_id": "20(b)",
+                "category": "scholarship_fellowship",
+                "exempt_amount": 500.0,
+            }
+        )
+        m = compute("IT-203", state)
+        assert m["line_16_federal"] == "1500"  # $2,000 - $500 exempt
 
     def test_mfs_spouse_fields_populated(self):
         """IT-203, unlike the federal 1040-NR, has real spouse ID lines."""
@@ -1194,6 +1466,27 @@ class TestFormIT203:
         assert m["spouse_last_name"] == "Chen"
         assert m["spouse_ssn"] == "912345670"
 
+    def test_mfs_checkbox_export_state_matches_real_pdf_byte_for_byte(self):
+        """Regression test: the real vendored PDF's MFS export state has a
+        mis-encoded apostrophe (a single mangled CJK codepoint, U+6060,
+        standing in for "'s") with NO separate "s" character after it. A
+        prior version of this module had an extra "s" baked into its
+        hardcoded string ("spouse恠s social...") that doesn't
+        byte-for-byte match any real export state on the field, so
+        pypdf's checkbox pass-through (_format_for_acro) would write an
+        unrecognized literal value and the MFS box would render
+        unchecked/broken on the actual PDF."""
+        state = _build_china_art20c_state()
+        state.identity.filing_status = "mfs"
+        m = compute("IT-203", state)
+        expected = (
+            "/3 Married Filing Seperate Return (enter spouse"
+            "恠 social security number above)"
+        )
+        assert m["filing_status"] == expected
+        # The bug this guards against: an extra "s" right after 恠.
+        assert "恠s" not in m["filing_status"]
+
     def test_no_spouse_fields_when_ssn_not_provided(self):
         state = _build_china_art20c_state()
         state.identity.filing_status = "mfs"
@@ -1206,25 +1499,50 @@ class TestFormIT203:
         m = compute("IT-203", state)
         assert m["item_c_dependent"] == "/yes"
 
-    def test_treaty_addback_lands_on_lines_18_and_22(self):
+    def test_treaty_addback_lands_on_line_22_only_not_line_18(self):
+        """Regression test: a prior version of this module put the treaty
+        addback on line 18 ("Total federal adjustments to income" — a
+        Schedule 1 concept this engine never models), which was the wrong
+        line/category. The treaty exemption belongs exclusively on line 22
+        (Form IT-225 line 9, the NY treaty addback) — it's already
+        excluded directly from lines 1/16 rather than being a separate
+        "adjustment" to subtract on line 18."""
         state = _build_china_art20c_state()
         state.ny.ny_treaty_addback = 5000.0
         state.ny.ny_agi = 35000.0
         m = compute("IT-203", state)
-        assert m["line_18_federal"] == "5000"
+        assert "line_18_federal" not in m
+        assert "line_18_identify" not in m
         assert m["line_22_federal"] == "5000"
 
-    def test_no_treaty_addback_omits_line_18_and_blanks_line_22(self):
+    def test_line_18_always_blank_no_schedule_1_adjustments_modeled(self):
         state = _build_china_art20c_state()
         state.ny.ny_treaty_addback = 0.0
         m = compute("IT-203", state)
-        # Line 18 ("Total federal adjustments, Identify") is a conditional
-        # text+amount pair only meaningful with a treaty exemption to name.
         assert "line_18_federal" not in m
         # Line 22 is an ordinary money line (like every other numbered
         # line on this form) — always present, blank when $0, matching
         # the _fmt_money convention used throughout this codebase.
         assert m["line_22_federal"] == ""
+
+    def test_lines_17_19_22_23_reconcile_with_treaty_exemption(self):
+        """End-to-end arithmetic check across the corrected lines: line 17
+        (= net line 1 + net line 16) minus line 18 (=0) must equal line 19,
+        and line 19 + line 22 (treaty addback) must equal line 23 (ny_agi)
+        — the form's own printed "add these lines" instructions, verified
+        against real computed state rather than assumed."""
+        state = _build_china_art20c_state()
+        state.income.fdap_taxable_total = 2000.0
+        state.ny.ny_treaty_addback = 5000.0
+        state.ny.ny_agi = 32000.0
+        state.ny.ny_source_income = 27000.0
+        m = compute("IT-203", state)
+        line_17 = int(m["line_17_federal"])
+        line_19 = int(m["line_19_federal"])
+        line_22 = int(m["line_22_federal"])
+        line_23 = int(m["line_23_federal"])
+        assert line_17 == line_19  # line 18 is always $0
+        assert line_19 + line_22 == line_23 == 32000
 
     def test_itemized_vs_standard_deduction_checkbox(self):
         state = _build_china_art20c_state()
@@ -1250,6 +1568,54 @@ class TestFormIT203:
         assert m["refund_method"] == "/direct deposit"
         assert m["routing_number"] == "021000021"
 
+    def test_paper_check_marked_when_refund_due_without_direct_deposit(self):
+        """Regression test: previously, a refund due without direct-deposit
+        info left both refund-method boxes blank (ambiguous on the printed
+        form). The real export state for "paper check" is confusingly
+        named "/debit card" in the vendored PDF's own AcroForm (verified
+        against the real widget's /AP/N export states — there is no
+        "debit card" text printed anywhere on the form)."""
+        state = _build_china_art20c_state()
+        state.tax.direct_deposit = False
+        state.ny.ny_refund_or_owed = -100.0  # refund due
+        m = compute("IT-203", state)
+        assert m["refund_method"] == "/debit card"
+        assert "account_type" not in m
+        assert "routing_number" not in m
+
+    def test_no_refund_method_marked_when_balance_due(self):
+        state = _build_china_art20c_state()
+        state.tax.direct_deposit = False
+        state.ny.ny_refund_or_owed = 100.0  # balance due, no refund
+        m = compute("IT-203", state)
+        assert "refund_method" not in m
+
+    def test_line_68b_mirrors_line_68_no_529_deposit_modeled(self):
+        state = _build_china_art20c_state()
+        state.ny.ny_refund_or_owed = -300.0
+        m = compute("IT-203", state)
+        assert m["line_67_dollars"] == m["line_68_dollars"] == m["line_68b_dollars"] == "300"
+
+    def test_signature_phone_and_email_populated(self):
+        state = _build_china_art20c_state()
+        state.identity.daytime_phone = "617-555-1234"
+        state.identity.email = "ming.chen@example.com"
+        m = compute("IT-203", state)
+        assert m["signature_phone_area_code"] == "617"
+        assert m["signature_phone_number"] == "5551234"
+        assert m["signature_email"] == "ming.chen@example.com"
+
+    def test_signature_phone_not_split_when_not_ten_digits(self):
+        """A malformed/international phone number can't be split into
+        IT-203's area-code-then-number boxes without guessing digit
+        boundaries — both boxes should stay blank rather than fabricate a
+        split."""
+        state = _build_china_art20c_state()
+        state.identity.daytime_phone = "+86 138 0000 0000"
+        m = compute("IT-203", state)
+        assert m["signature_phone_area_code"] == ""
+        assert m["signature_phone_number"] == ""
+
 
 class TestFormIT203D:
     def test_salt_addback_and_final_deduction(self):
@@ -1274,3 +1640,31 @@ class TestFormIT203D:
         m = compute("IT-203-D", state)
         assert m["line_9_salt_addback"] == ""
         assert m["line_10"] == "500"
+
+    def test_other_itemized_populates_line_7_and_reconciles_line_8(self):
+        """sch_a.other_itemized must land on line 7 (mirrors schedule_a.py's
+        own line_7_other_itemized mapping of the same federal value) so the
+        visible line-item breakdown actually sums to line 8's total instead
+        of silently dropping this component."""
+        state = _build_china_art20c_state()
+        state.sch_a = {
+            "total": 2850.0,
+            "state_local_income_tax": 1200.0,
+            "charitable_cash": 800.0,
+            "charitable_noncash": 200.0,
+            "casualty_disaster_loss": 500.0,
+            "other_itemized": 150.0,
+        }
+        m = compute("IT-203-D", state)
+        assert m["line_7_other_itemized"] == "150"
+        assert m["line_8_total"] == "2850"
+        # Every populated line item on this NY sheet reconciles with line 8.
+        assert (
+            float(m["line_2_taxes_paid"])
+            + float(m["line_4_charity"])
+            + float(m["line_5_casualty"])
+            + float(m["line_7_other_itemized"])
+            == float(m["line_8_total"])
+        )
+        assert m["line_10"] == "1650"
+        assert m["line_15_ny_itemized"] == "1650"

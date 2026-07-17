@@ -34,6 +34,17 @@ this constant is a PLACEHOLDER that must be verified against the current
 quarter's published Revenue Ruling and refreshed periodically, the same
 convention already used for src/database/tax_year/2025/ny.json's indexed
 figures.
+
+``evaluate()`` also populates Form 2210, Part I, lines 4/5/8/9
+(``EstimatedTaxPenaltyResult.line_4_current_year_tax`` etc.) unconditionally,
+and Section A of Part III (``.section_a``, via ``_section_a_worksheet()``)
+whenever no safe harbor is met — both feed form_2210.py's PDF field map
+directly. (Fixed 2025: these were previously computed as local variables /
+via a real helper function but never actually written onto the returned
+result, so every real Form 2210 PDF silently rendered those lines blank
+regardless of outcome — verified by generating and inspecting real PDFs,
+see tests/test_functions/test_estimated_tax_penalty.py::TestPartILinesAndSectionA
+and tests/test_assembly/test_forms.py::TestForm2210.)
 """
 
 from __future__ import annotations
@@ -218,6 +229,25 @@ def evaluate(
     total_paid = withholding + estimated
     underpayment = current_tax - total_paid
 
+    prior = _d(prior_year_total_tax)
+    threshold_pct = _d("1.10") if prior_year_agi_over_150k else _d("1.00")
+
+    # Form 2210, Part I, lines 4/5/8/9 — computed unconditionally (see the
+    # EstimatedTaxPenaltyResult docstring): these are printed on page 1
+    # regardless of whether a safe harbor is ultimately met below, and the
+    # PDF populator (form_2210.py) needs real values for them either way.
+    # NOTE: this block was previously dead — the local variables below were
+    # computed but never actually written onto `result`, so every real
+    # Form 2210 PDF this engine ever generated left lines 4/5/8/9 (and, via
+    # the same oversight, the Section A worksheet on page 2) blank. Fixed.
+    required_annual_payment = current_tax * _d("0.90")
+    if prior > ZERO:
+        required_annual_payment = min(required_annual_payment, prior * threshold_pct)
+    result.line_4_current_year_tax = current_tax
+    result.line_5_ninety_pct_current_year = current_tax * _d("0.90")
+    result.line_8_prior_year_max = prior * threshold_pct if prior > ZERO else None
+    result.line_9_required_annual_payment = required_annual_payment
+
     if underpayment < SAFE_HARBOR_DE_MINIMIS:
         result.safe_harbor_met = True
         result.safe_harbor_reason = "Underpayment is below the $1,000 de minimis threshold."
@@ -228,9 +258,7 @@ def evaluate(
         result.safe_harbor_reason = "Withholding ≥ 90% of current-year tax."
         return result
 
-    prior = _d(prior_year_total_tax)
     if prior > ZERO:
-        threshold_pct = _d("1.10") if prior_year_agi_over_150k else _d("1.00")
         if total_paid >= prior * threshold_pct:
             result.safe_harbor_met = True
             result.safe_harbor_reason = (
@@ -244,11 +272,6 @@ def evaluate(
         "No safe harbor met; penalty computed below using Form 2210 Part III's "
         "regular method."
     )
-
-    required_annual_payment = current_tax * _d("0.90")
-    if prior > ZERO:
-        threshold_pct = _d("1.10") if prior_year_agi_over_150k else _d("1.00")
-        required_annual_payment = min(required_annual_payment, prior * threshold_pct)
 
     required_per_period = required_annual_payment / 4
     withholding_per_period = withholding / 4
@@ -294,4 +317,10 @@ def evaluate(
 
     result.penalty_amount = total_penalty
     result.periods = periods
+    # Section A (Form 2210, Part III, page 2, lines 10-18) — the printed
+    # column-to-column carryforward worksheet. Also previously dead: the
+    # helper was defined but never called from here. See
+    # _section_a_worksheet's own docstring for why this is deliberately
+    # separate bookkeeping from `periods` above.
+    result.section_a = _section_a_worksheet(periods)
     return result

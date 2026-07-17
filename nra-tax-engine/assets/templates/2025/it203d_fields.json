@@ -4,6 +4,7 @@
   "line_2_taxes_paid": "line 1.1.0",
   "line_4_charity": "line 1.3.0",
   "line_5_casualty": "line 1.4.0",
+  "line_7_other_itemized": "line 1.6.0",
   "line_8_total": "line 1.7.0",
   "line_9_salt_addback": "line 1.1.1",
   "line_10": "line 1.2.1",

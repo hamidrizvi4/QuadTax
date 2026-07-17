@@ -470,16 +470,127 @@ class TestFormPopulatorNYVendoredTemplates:
         assert it203b_values["lA"] == "200"
         assert it203b_values["hA"] == "240"
 
-    def test_it203_mfs_checkbox_matches_mangled_apostrophe_export_state(self):
-        """The real vendored PDF's MFS export state contains a mis-encoded
-        apostrophe. The populator must emit that exact literal string, and
-        pypdf's checkbox pass-through must resolve it to a real (non-Off)
-        state, not silently fail to check the box."""
+    def test_it203b_line_1n_and_schedule_b_through_real_ny_agent(self):
+        """End-to-end regression covering two IT-203-B bugs, driven through
+        the real NYAgent (not hand-set state) so the full intake -> state ->
+        PDF pipeline is exercised:
+
+        1. line 1n must reflect ny_source_allocator.allocate()'s actual
+           apportionment (0 for a non-NY employer), not just the raw
+           ny_work_days/total_work_days ratio, so 1n x 1o == 1p on the
+           real filled PDF.
+        2. Schedule B's address block must be gated on abode_months_in_year
+           (living quarters actually maintained), not days_in_ny (mere
+           physical-presence days) -- a filer who never maintained NY
+           living quarters must not get an address row even with a large
+           days_in_ny count.
+        """
+        from src.agents.l9_ny import NYAgent
+
         repo_templates = (
             Path(__file__).resolve().parents[2] / "assets" / "templates" / "2025"
         )
-        if not (repo_templates / "it203.pdf").exists():
+        if not (repo_templates / "it203b.pdf").exists():
+            pytest.skip("NY IT-203-B template not vendored")
+
+        state = ReturnStateObject(tax_year=2025)
+        state.identity.first_name = "Arjun"
+        state.identity.last_name = "Rao"
+        state.identity.ssn = "123456789"
+        state.identity.us_address_line1 = "10 Astor Pl"
+        state.identity.us_city = "New York"
+        state.identity.us_state = "NY"
+        state.identity.us_zip = "10003"
+        state.identity.filing_status = "single"
+        state.income.total_w2_wages = 50000.0
+        state.forms_required = ["IT-203", "IT-203-B"]
+        state.ready_for_assembly = True
+
+        NYAgent().process_ny(
+            state,
+            {
+                "ny_work_days": 120,
+                "total_work_days": 240,
+                "employer_in_ny": False,  # remote job for an out-of-state employer
+                "days_in_ny": 300,  # physically present a lot ...
+                "has_permanent_abode_in_ny": False,
+                "abode_months_in_year": 0,  # ... but never leased/maintained NY housing
+                "is_student_dorm": False,
+            },
+        )
+        assert state.ny.ny_source_wages == 0.0  # sanity: allocate() zeroed it out
+
+        out = tempfile.mkdtemp()
+        populator = FormPopulator(
+            templates_dir=str(repo_templates.parent), outputs_dir=out, tax_year=2025,
+        )
+        generated = populator.generate_filing_package(state)
+        it203b_path = next(p for p in generated if p.endswith("IT-203-B.pdf"))
+        values = {
+            k: v.get("/V") for k, v in (PdfReader(it203b_path).get_fields() or {}).items()
+        }
+
+        assert values["lA"] == "120"  # real physical NY work days, unaffected
+        assert values["1n2A"] == "0.0000"  # NOT 120/240 = 0.5000
+        assert values["p dollarsA"] == "0"
+        assert values.get("Col A1 - address") is None
+        assert values.get("Col B1 - City") is None
+        assert values.get("ZIP1") is None
+        assert values.get("Col E1 - box.0") in (None, "/Off")
+        assert values["days"] == "300"  # days_in_ny is still reported on its own line
+
+    @staticmethod
+    def _real_widget_export_states(pdf_path: Path, field_name: str) -> set:
+        """Dump the REAL /AP /N export states for a field's widget
+        annotations directly from the raw PDF structure — not
+        ``reader.get_fields()``'s ``/_States_``, which the module docstrings
+        throughout this codebase document as unreliable for multi-kid radio
+        groups (it collapses to a generic ``/1``/``/Off`` guess instead of
+        the field's actual defined states)."""
+
+        def _fq_name(obj) -> str:
+            parts = []
+            cur = obj
+            while cur is not None:
+                t = cur.get("/T")
+                if t:
+                    parts.append(str(t))
+                parent = cur.get("/Parent")
+                cur = parent.get_object() if parent else None
+            return ".".join(reversed(parts))
+
+        reader = PdfReader(str(pdf_path))
+        states: set = set()
+        for page in reader.pages:
+            for annot in page.get("/Annots") or []:
+                obj = annot.get_object()
+                if obj.get("/Subtype") != "/Widget" or _fq_name(obj) != field_name:
+                    continue
+                ap = obj.get("/AP")
+                if ap and "/N" in ap:
+                    n_obj = ap["/N"].get_object()
+                    if hasattr(n_obj, "keys"):
+                        states.update(n_obj.keys())
+        return states
+
+    def test_it203_mfs_checkbox_matches_mangled_apostrophe_export_state(self):
+        """The real vendored PDF's MFS export state contains a mis-encoded
+        apostrophe (a single mangled CJK codepoint standing in for "'s",
+        with no separate "s" character after it). The populator must emit
+        that EXACT literal string — verified here against the real
+        widget's own /AP/N export states dumped straight from the PDF, not
+        just "isn't /Off" — or pypdf's checkbox pass-through silently
+        writes an unrecognized value and the MFS box renders unchecked/
+        broken despite /V looking superficially plausible."""
+        repo_templates = (
+            Path(__file__).resolve().parents[2] / "assets" / "templates" / "2025"
+        )
+        template_path = repo_templates / "it203.pdf"
+        if not template_path.exists():
             pytest.skip("NY IT-203 templates not vendored")
+
+        real_states = self._real_widget_export_states(template_path, "Filing Status")
+        assert real_states, "could not read real Filing Status export states from template"
 
         state = ReturnStateObject(tax_year=2025)
         state.identity.first_name = "Raj"
@@ -502,6 +613,12 @@ class TestFormPopulatorNYVendoredTemplates:
         filing_status_value = str(fields["Filing Status"].get("/V"))
         assert filing_status_value != "/Off"
         assert "Married Filing Seperate" in filing_status_value
+        # The decisive check: the written value must be byte-for-byte one
+        # of the field's real, defined export states — not merely
+        # non-"/Off" and superficially plausible (a mismatched string with
+        # an extra stray "s" would still pass the two asserts above while
+        # rendering the checkbox unchecked/broken in an actual viewer).
+        assert filing_status_value in real_states
         assert fields["Spouse's first name"].get("/V") == "Anjali"
 
 
