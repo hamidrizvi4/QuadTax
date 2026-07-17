@@ -28,8 +28,8 @@ const NAV_LINKS = [
 
 const STATS = [
   { value: "66", label: "treaty countries, verified against IRS Pub 901" },
-  { value: "324", label: "automated tests guarding every calculation" },
-  { value: "13", label: "federal & NY forms populated per return" },
+  { value: "596", label: "automated tests guarding every calculation" },
+  { value: "14", label: "federal & NY forms populated per return" },
   { value: "$5,066", label: "recovered in our worked NYU test scenario" },
 ];
 
@@ -148,7 +148,7 @@ const FAQS = [
   },
   {
     q: "Is AI calculating my taxes?",
-    a: "No — and that's the point. AI reads your documents and classifies your income description. Every calculation (brackets, treaty caps, FICA, New York add-backs) is deterministic, citation-annotated Python verified by 324 automated tests, including twelve hand-computed golden scenarios.",
+    a: "No — and that's the point. AI reads your documents and classifies your income description. Every calculation (brackets, treaty caps, FICA, New York add-backs) is deterministic, citation-annotated Python verified by 596 automated tests, including twelve hand-computed golden scenarios.",
   },
   {
     q: "What is the FICA refund everyone mentions?",

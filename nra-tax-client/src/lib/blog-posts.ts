@@ -45,7 +45,7 @@ export const BLOG_POSTS: BlogPost[] = [
       {
         heading: 'Why this matters for you',
         paragraphs: [
-          'When the math is deterministic, the same inputs always produce the same return. There is no "the AI felt different today." Our 324-test suite locks in twelve hand-computed golden scenarios — from a Chinese F-1 claiming the $5,000 Article 20(c) exemption to an Indian student claiming the standard deduction no other nationality gets.',
+          'When the math is deterministic, the same inputs always produce the same return. There is no "the AI felt different today." Our 596-test suite locks in twelve hand-computed golden scenarios — from a Chinese F-1 claiming the $5,000 Article 20(c) exemption to an Indian student claiming the standard deduction no other nationality gets.',
         ],
       },
     ],
