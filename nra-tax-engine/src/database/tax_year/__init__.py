@@ -112,6 +112,24 @@ def _data_dir(tax_year: int) -> Path:
     return Path(__file__).parent / str(tax_year)
 
 
+def supported_years() -> List[int]:
+    """Return every tax year currently vendored under ``database/tax_year/``.
+
+    Scans for direct subdirectories whose name is a 4-digit year (skips
+    ``__pycache__`` and any other non-year directory). Used to build
+    helpful "unsupported year" error messages instead of a bare
+    ``FileNotFoundError`` — see :func:`load_year` and
+    :class:`src.orchestrator.engine.UnsupportedTaxYearError`.
+    """
+    root = Path(__file__).parent
+    years = [
+        int(child.name)
+        for child in root.iterdir()
+        if child.is_dir() and child.name.isdigit() and len(child.name) == 4
+    ]
+    return sorted(years)
+
+
 def _strip_meta(value):
     """Recursively drop keys whose name begins with ``_`` (documentation/meta)."""
     if isinstance(value, dict):

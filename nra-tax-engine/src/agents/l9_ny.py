@@ -110,6 +110,13 @@ class NYAgent:
         ny_state.ny_work_days = intake.get("ny_work_days", 0)
         ny_state.total_work_days = intake.get("total_work_days", 0)
         ny_state.abode_months_in_year = intake.get("abode_months_in_year", 0)
+        # Same class of bug as above: employer_in_ny drives the allocate()
+        # apportionment branch above but was never written back, so
+        # IT-203-B line 1n had no way to reproduce allocate()'s exact
+        # formula for a non-NY employer (it would silently fall back to
+        # the day-ratio branch even when allocate() zeroed out NY-source
+        # wages because the employer isn't NY-based).
+        ny_state.employer_in_ny = intake.get("employer_in_ny", True)
 
         ny_state.ny_source_wages = allocation.ny_source_wages
         ny_state.ny_source_1042s_gross = allocation.ny_source_1042s_gross

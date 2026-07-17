@@ -4,6 +4,8 @@ These cover only the DAG semantics (``check_dependencies``); the full pipeline
 is exercised in ``tests/test_integration/test_full_pipeline.py``.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from src.orchestrator.engine import (
@@ -12,6 +14,7 @@ from src.orchestrator.engine import (
     OrchestrationError,
     TaxEngine,
     TaxReturnEngine,
+    UnsupportedTaxYearError,
 )
 from src.orchestrator.state import ReturnStateObject
 
@@ -63,6 +66,48 @@ class TestTaxReturnEngine:
     def test_required_for_assembly_includes_l4(self):
         """Regression: L4 must be among the required-for-assembly layers."""
         assert "L4" in REQUIRED_LAYERS_FOR_ASSEMBLY
+
+
+class TestUnsupportedTaxYear:
+    """An unsupported tax_year must fail cleanly, fast, and before any LLM
+    call — not surface a bare ``FileNotFoundError`` deep inside L6/L8 after
+    L1/L3/L4 have already spent real LLM calls on OCR extraction."""
+
+    def test_unsupported_year_raises_well_typed_error(self):
+        """A well-typed, actionable exception — not a raw FileNotFoundError."""
+        mock_llm = MagicMock()
+        engine = TaxEngine(llm_client=mock_llm, secondary_llm_client=mock_llm)
+        mcq_answers = {
+            "tax_year": 2026,
+            "visa_type": "F-1",
+            "first_us_arrival_year": 2024,
+            "tax_residence_country": "China",
+            "income_description": "PhD TA",
+            "requires_services": True,
+            "is_qualified_expense": False,
+        }
+        with pytest.raises(UnsupportedTaxYearError) as excinfo:
+            engine.run_full_pipeline(
+                i94_ocr_text="x",
+                w2_ocr_texts=[],
+                form_1042s_ocr_texts=[],
+                mcq_answers=mcq_answers,
+            )
+
+        exc = excinfo.value
+        assert exc.tax_year == 2026
+        assert exc.available_years == [2025]
+        assert isinstance(exc, OrchestrationError)
+        # No LLM call should have been attempted — the year check runs
+        # before L1 (residency/OCR extraction) even starts.
+        mock_llm.beta.chat.completions.parse.assert_not_called()
+
+    def test_supported_year_does_not_raise_unsupported_error(self):
+        """Sanity check: the currently-supported year never trips this check."""
+        from src.database.tax_year import load_year
+
+        # Should not raise — 2025 is vendored.
+        load_year(2025)
 
 
 class TestPhase3AMTInput:

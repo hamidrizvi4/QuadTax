@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from src.agents._llm_cache import LLMExtractionCache
 from src.agents._llm_safety import safe_parse
 from src.functions.treaty_evaluator import TreatyEvaluator
 from src.functions.treaty_schema import AppliedTreatyBenefit, TreatyCategory
@@ -28,6 +29,13 @@ from src.llm_config import PRIMARY_MODEL, SECONDARY_MODEL, get_openai_client
 
 if TYPE_CHECKING:
     from src.orchestrator.state import ReturnStateObject
+
+
+# Process-lifetime cache for income-description -> treaty-category
+# classification. The classifier prompt is static and the result depends
+# only on the filer's free-text income description, so that text alone is
+# the deterministic key.
+_treaty_classification_cache = LLMExtractionCache()
 
 
 # Category enum exposed to the LLM. Mirrors :data:`TreatyCategory` minus the
@@ -85,18 +93,23 @@ class TreatyAgent:
             "Use 'foreign_source_remittance' when the income comes from outside the US. "
             "Return 'none' if no treaty category fits."
         )
-        result = safe_parse(
-            primary_client=self.llm_client,
-            primary_model=PRIMARY_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Income description:\n{income_description}"},
-            ],
-            response_format=TreatyCategoryMapping,
-            secondary_client=self.secondary_llm_client,
-            secondary_model=SECONDARY_MODEL if self.secondary_llm_client else None,
-        )
-        return result.mapped_category
+        cache_key = _treaty_classification_cache.make_key(income_description)
+
+        def _call() -> LLMTreatyCategory:
+            result = safe_parse(
+                primary_client=self.llm_client,
+                primary_model=PRIMARY_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Income description:\n{income_description}"},
+                ],
+                response_format=TreatyCategoryMapping,
+                secondary_client=self.secondary_llm_client,
+                secondary_model=SECONDARY_MODEL if self.secondary_llm_client else None,
+            )
+            return result.mapped_category
+
+        return _treaty_classification_cache.get_or_call(cache_key, _call)
 
     # ------------------------------------------------------------------
     # State mutation
@@ -173,7 +186,7 @@ class TreatyAgent:
             unless an article carries the saving-clause exception (then the
             evaluator still runs).
         """
-        evaluator = TreatyEvaluator(tax_year=2025)
+        evaluator = TreatyEvaluator(tax_year=current_state.tax_year)
         iso2 = _resolve_country_to_iso2(tax_residence_country)
 
         # Resident aliens: only run the evaluator when the country has at least

@@ -32,7 +32,7 @@ class FicaAgent:
         # ==========================================
         # 1. Deterministic Evaluation
         # ==========================================
-        calculator = FicaCalculator()
+        calculator = FicaCalculator(tax_year=current_state.tax_year)
         
         result = calculator.evaluate_fica_refund(
             status=current_state.residency.status,

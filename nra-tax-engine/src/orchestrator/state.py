@@ -559,6 +559,18 @@ class NYTaxState(BaseModel):
         default=0, ge=0, le=12,
         description="Months a NY abode was maintained — IT-203-B Schedule B.",
     )
+    employer_in_ny: bool = Field(
+        default=True,
+        description=(
+            "True if the W-2 employer for the Schedule A job is based in NY — "
+            "drives ny_source_allocator.allocate()'s apportionment branch (day-"
+            "ratio vs. 0% for an out-of-state employer). Defaults to True (the "
+            "typical F-1-at-a-NY-university case) so existing callers that never "
+            "set this explicitly keep the day-ratio behavior. Persisted here so "
+            "IT-203-B line 1n can reproduce allocate()'s exact formula instead "
+            "of re-deriving only the day-ratio branch."
+        ),
+    )
 
     ny_source_wages: float = Field(default=0.0, ge=0.0)
     ny_source_1042s_gross: float = Field(default=0.0, ge=0.0)

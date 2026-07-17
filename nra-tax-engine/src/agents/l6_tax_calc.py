@@ -75,7 +75,7 @@ class TaxCalculationAgent:
         deduction_amount = 0.0
         deduction_type = "none"
         if india_standard_deduction:
-            year = load_year(2025)
+            year = load_year(current_state.tax_year)
             if current_state.extras.can_be_claimed_as_dependent:
                 # IRC §63(c)(5): a filer claimable as someone else's
                 # dependent gets a capped deduction, not the full amount —

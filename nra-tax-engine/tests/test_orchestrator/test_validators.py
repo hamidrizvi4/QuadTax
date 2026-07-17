@@ -33,6 +33,46 @@ class TestPostL1:
         validate_post_l1(state)
         assert state.requires_human_review == []
 
+    def test_negative_days_present_year_minus_1_flagged(self):
+        """Raw I-94 day counts for prior years are assigned onto state
+        straight from LLM extraction (see l1_residency.py) with no
+        Pydantic re-validation on assignment — a garbled OCR scan can
+        leave a negative value here that also feeds the SPT weighted
+        formula and gets printed on Form 8843 / Schedule OI verbatim."""
+        state = ReturnStateObject()
+        state.residency.days_present_year_minus_1 = -50  # type: ignore[assignment]
+        validate_post_l1(state)
+        assert any(
+            "tax_year - 1" in r and "outside 0-366" in r
+            for r in state.requires_human_review
+        )
+
+    def test_excessive_days_present_year_minus_2_flagged(self):
+        state = ReturnStateObject()
+        state.residency.days_present_year_minus_2 = 999  # type: ignore[assignment]
+        validate_post_l1(state)
+        assert any(
+            "tax_year - 2" in r and "outside 0-366" in r
+            for r in state.requires_human_review
+        )
+
+    def test_negative_days_present_current_year_flagged(self):
+        state = ReturnStateObject()
+        state.residency.days_present_current_year = -1  # type: ignore[assignment]
+        validate_post_l1(state)
+        assert any(
+            "current year" in r and "outside 0-366" in r
+            for r in state.requires_human_review
+        )
+
+    def test_in_range_raw_day_counts_not_flagged(self):
+        state = ReturnStateObject()
+        state.residency.days_present_current_year = 300
+        state.residency.days_present_year_minus_1 = 365
+        state.residency.days_present_year_minus_2 = 0
+        validate_post_l1(state)
+        assert state.requires_human_review == []
+
     def test_resident_alien_status_flagged(self):
         """A resident-alien classification (exempt window expired, or SPT
         independently met) needs Form 1040, not the 1040-NR this engine
@@ -129,6 +169,28 @@ class TestPostL3:
         state.income.total_w2_withholding = 4500.0
         validate_post_l3(state)
         assert state.requires_human_review == []
+
+    def test_negative_w2_withholding_flagged(self):
+        """A garbled OCR sign error (e.g. a misread parenthesis) can leave
+        a negative federal-withholding figure on state with no exception
+        raised anywhere upstream — this silently understates tax already
+        paid. Must be flagged for human review."""
+        state = ReturnStateObject()
+        state.income.total_w2_withholding = -4500.0  # type: ignore[assignment]
+        validate_post_l3(state)
+        assert any(
+            "negative W-2 federal withholding" in r
+            for r in state.requires_human_review
+        )
+
+    def test_negative_1042s_withholding_flagged(self):
+        state = ReturnStateObject()
+        state.income.total_1042s_withholding = -700.0  # type: ignore[assignment]
+        validate_post_l3(state)
+        assert any(
+            "negative 1042-S federal withholding" in r
+            for r in state.requires_human_review
+        )
 
 
 class TestPostL4:

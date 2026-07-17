@@ -14,22 +14,31 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import List, Optional
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from src.assembly.mailing_packager import MailingPackager
-from src.api.auth import require_api_key
+from src.api.auth import _API_KEY_ENV, _PLACEHOLDER_API_KEY, require_api_key
 from src.api.ocr_endpoint import router as ocr_router
+from src.api.rate_limit import LLM_ENDPOINT_RATE_LIMIT, limiter
 from src.intake.intake_schema import IntakePayload
 from src.intake.mcq_router import MCQRouter
-from src.orchestrator.engine import HumanReviewRequiredError, TaxEngine
+from src.orchestrator.audit import _AUDIT_DIR_ENV
+from src.orchestrator.engine import (
+    HumanReviewRequiredError,
+    TaxEngine,
+    UnsupportedTaxYearError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +130,14 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+# Per-IP rate limiting (slowapi). The shared Limiter instance lives in
+# src/api/rate_limit.py so both this module and ocr_endpoint.py can decorate
+# routes with it. Only the LLM-calling POST endpoints (/submit, /ocr) are
+# actually decorated with @limiter.limit(...) below — GET /api/v1/healthz is
+# intentionally left unlimited.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 @app.middleware("http")
 async def security_headers(request, call_next):
@@ -161,9 +178,54 @@ class SubmitRequest(BaseModel):
     )
 
 
+def _templates_dir() -> Path:
+    """Vendored IRS PDF templates directory for the current tax year.
+
+    Matches :class:`~src.assembly.form_populator.FormPopulator`'s default
+    ``templates_dir="assets/templates"`` joined with the tax year. Kept as a
+    small function (rather than inlined) so tests can monkeypatch it to
+    simulate a missing/empty vendoring directory without touching the real
+    filesystem.
+    """
+    return Path("assets/templates") / "2025"
+
+
+def _health_checks() -> dict:
+    """Fast, no-network checks of the conditions the API needs to actually work.
+
+    No live network calls to the LLM provider — this environment blocks
+    outbound network to LLM providers anyway, and a health check must stay
+    cheap enough to poll frequently.
+    """
+    api_key = os.getenv(_API_KEY_ENV)
+    api_key_configured = bool(api_key) and api_key != _PLACEHOLDER_API_KEY
+
+    # src.llm_config.get_openai_client() builds a plain openai.OpenAI(),
+    # which reads OPENAI_API_KEY from the environment itself.
+    llm_key_configured = bool(os.getenv("OPENAI_API_KEY"))
+
+    templates_dir = _templates_dir()
+    templates_present = templates_dir.is_dir() and any(templates_dir.iterdir())
+
+    return {
+        "api_key_configured": api_key_configured,
+        "llm_api_key_configured": llm_key_configured,
+        "templates_present": templates_present,
+    }
+
+
 @app.get("/api/v1/healthz", tags=["meta"])
-def healthz() -> dict:
-    return {"status": "ok"}
+def healthz() -> JSONResponse:
+    """Liveness/readiness probe. Deliberately NOT rate-limited.
+
+    Returns 200 with ``{"status": "ok", "checks": {...}}`` only when every
+    check passes; otherwise 503 with ``{"status": "degraded", "checks": {...}}``
+    so callers/orchestrators can see exactly which precondition failed.
+    """
+    checks = _health_checks()
+    healthy = all(checks.values())
+    body = {"status": "ok" if healthy else "degraded", "checks": checks}
+    return JSONResponse(content=body, status_code=200 if healthy else 503)
 
 
 @app.post(
@@ -172,22 +234,23 @@ def healthz() -> dict:
     tags=["tax"],
     dependencies=[Depends(require_api_key)],
 )
-def submit(request: SubmitRequest) -> TaxProcessResponse:
+@limiter.limit(LLM_ENDPOINT_RATE_LIMIT)
+def submit(request: Request, payload: SubmitRequest) -> TaxProcessResponse:
     """Run the full L1-L9 pipeline against a typed intake payload."""
     router = MCQRouter()
-    mcq_dict = router.to_mcq_answers(request.intake)
+    mcq_dict = router.to_mcq_answers(payload.intake)
 
     # Pre-seed identity so Phase-3 add-ons (AMT, ITIN, Form 2210) read the
     # right values when they run inside run_full_pipeline().
-    seeded_state = router.populate_state(request.intake)
+    seeded_state = router.populate_state(payload.intake)
 
-    engine = TaxEngine(force_assembly=request.force_assembly)
+    engine = TaxEngine(force_assembly=payload.force_assembly)
     correlation = uuid.uuid4().hex[:12]
     try:
         generated_forms, state = engine.run_full_pipeline(
-            i94_ocr_text=request.i94_ocr_text,
-            w2_ocr_texts=request.w2_ocr_texts,
-            form_1042s_ocr_texts=request.form_1042s_ocr_texts,
+            i94_ocr_text=payload.i94_ocr_text,
+            w2_ocr_texts=payload.w2_ocr_texts,
+            form_1042s_ocr_texts=payload.form_1042s_ocr_texts,
             mcq_answers=mcq_dict,
             initial_state=seeded_state,
         )
@@ -200,6 +263,21 @@ def submit(request: SubmitRequest) -> TaxProcessResponse:
             status_code=422,
             detail={"error": "human_review_required", "reasons": exc.reasons},
         ) from exc
+    except UnsupportedTaxYearError as exc:
+        # Expected, actionable condition — not a pipeline bug. The filer (or
+        # client) asked for a tax year this engine has no vendored bracket/
+        # deduction/FICA data for yet. Surface exactly which year was
+        # requested and which years ARE supported instead of the opaque 500
+        # every other pipeline failure gets.
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "unsupported_tax_year",
+                "requested_tax_year": exc.tax_year,
+                "supported_tax_years": exc.available_years,
+                "message": str(exc),
+            },
+        ) from exc
     except Exception as exc:  # noqa: BLE001
         _handle_pipeline_error(exc, correlation)
 
@@ -208,7 +286,7 @@ def submit(request: SubmitRequest) -> TaxProcessResponse:
     package = packager.assemble(
         state,
         forms_dir=Path("outputs"),
-        output_dir=Path(request.output_dir),
+        output_dir=Path(payload.output_dir),
     )
 
     from src.narrative.generator import NarrativeGenerator
@@ -276,6 +354,199 @@ def download_packet(path: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Packet not found.")
     return FileResponse(abs_path, media_type="application/pdf",
                         filename=os.path.basename(abs_path))
+
+
+# ---------------------------------------------------------------------------
+# GDPR Art. 17 right-to-erasure endpoint
+#
+# This engine has no user database — nothing to look up by a stable account
+# or user id. The two things it actually persists to disk are:
+#
+#   1. Per-form outputs / mailing packets under ``outputs/`` (or whatever
+#      ``output_dir`` was passed to ``POST /api/v1/submit``), named
+#      ``<name_stem>_<Form-Name>.pdf`` / ``.fieldmap.json`` where
+#      ``name_stem`` is ``"<first_name>_<last_name>"``
+#      (see ``FormPopulator._safe_stem``). The three merged mailing packets
+#      (``packet_federal.pdf``, ``packet_NY.pdf``, ``packet_843.pdf`` and
+#      their JSON/cover-sheet siblings) are written directly into
+#      ``output_dir`` by ``MailingPackager`` WITHOUT that name-stem prefix,
+#      so they are not safely attributable to one filer when ``output_dir``
+#      is shared across filings (e.g. the default ``"outputs"``).
+#   2. An optional JSONL audit trail at
+#      ``<QUADTAX_AUDIT_DIR>/<filing_id>/audit.jsonl`` (see
+#      ``src.orchestrator.audit.record``) — only written when
+#      ``QUADTAX_AUDIT_DIR`` is configured.
+#
+# KNOWN GAP: ``POST /api/v1/submit`` never accepts or assigns a
+# ``filing_id`` today (``ReturnStateObject.filing_id`` is ``None`` unless a
+# caller drives ``TaxEngine``/``ReturnStateObject`` directly instead of
+# through this HTTP API), so every audit entry persisted through this API
+# currently lands under ``<QUADTAX_AUDIT_DIR>/default/audit.jsonl`` with no
+# way to disambiguate one filer's entries from another's by filing_id alone.
+# This endpoint accepts ``filing_id`` for forward compatibility (and for
+# integrators who *do* set it directly on the state object) but cannot
+# invent a working per-filing audit key that doesn't exist in the current
+# API surface. The name-stem-scoped per-form output deletion below is the
+# real, working part of this endpoint today.
+# ---------------------------------------------------------------------------
+
+_SAFE_NAME_STEM_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+# Written by MailingPackager directly into output_dir — NOT name-stem scoped.
+_SHARED_PACKET_FILENAMES = [
+    "packet_federal.pdf",
+    "packet_federal.json",
+    "packet_federal_cover.md",
+    "packet_NY.pdf",
+    "packet_NY.json",
+    "packet_NY_cover.md",
+    "packet_843.pdf",
+    "packet_843.json",
+    "packet_843_cover.md",
+]
+
+
+class ErasureRequest(BaseModel):
+    """Inputs to ``POST /api/v1/erasure``."""
+
+    name_stem: str = Field(
+        description=(
+            "The filer name-stem used to prefix per-form outputs — "
+            "'<first_name>_<last_name>' as computed by "
+            "FormPopulator._safe_stem() and echoed in generated_form_outputs "
+            "paths from POST /api/v1/submit (e.g. 'Wei_Chen_1040-NR.pdf' has "
+            "name_stem 'Wei_Chen'). Must match ^[A-Za-z0-9_-]+$."
+        )
+    )
+    output_dir: str = Field(
+        default="outputs",
+        description="The same output_dir originally passed to POST /api/v1/submit for this filing.",
+    )
+    filing_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional. Deletes the persisted audit trail at "
+            "QUADTAX_AUDIT_DIR/<filing_id>/audit.jsonl, if QUADTAX_AUDIT_DIR "
+            "is configured and that file exists. See the module-level note "
+            "above: POST /api/v1/submit does not currently set this, so it "
+            "only has an effect for integrations that set "
+            "ReturnStateObject.filing_id directly."
+        ),
+    )
+    delete_shared_packets: bool = Field(
+        default=False,
+        description=(
+            "When True, also deletes packet_federal.pdf/packet_NY.pdf/"
+            "packet_843.pdf (and their JSON/cover-sheet siblings) from "
+            "output_dir. These are NOT name-stem scoped, so only pass True "
+            "when output_dir is known to be dedicated to this one filing — "
+            "otherwise this can delete another filer's merged packets."
+        ),
+    )
+
+
+class ErasureResult(BaseModel):
+    """Response from ``POST /api/v1/erasure``."""
+
+    status: str = Field(description="Always 'erased' on success — deleting zero files is not an error.")
+    deleted_files: List[str] = Field(default_factory=list)
+    deleted_audit_path: Optional[str] = None
+    warnings: List[str] = Field(
+        default_factory=list,
+        description="Non-fatal notes about scope limitations of this erasure request.",
+    )
+
+
+@app.post(
+    "/api/v1/erasure",
+    response_model=ErasureResult,
+    tags=["privacy"],
+    dependencies=[Depends(require_api_key)],
+)
+def erase_filing(payload: ErasureRequest) -> ErasureResult:
+    """GDPR Art. 17 right-to-erasure: delete on-disk outputs for one filer.
+
+    Deletes every per-form output file under ``output_dir`` whose name
+    starts with ``<name_stem>_`` (the PDFs / field-map JSONs written by
+    ``FormPopulator``), and — only if explicitly requested via
+    ``delete_shared_packets`` — the merged mailing packets that
+    ``MailingPackager`` writes into the same directory. Optionally also
+    deletes the persisted audit-trail JSONL for ``filing_id`` when
+    ``QUADTAX_AUDIT_DIR`` is configured. Idempotent: erasing a filing with
+    no matching files is still a 200, not a 404.
+    """
+    if not _SAFE_NAME_STEM_RE.match(payload.name_stem):
+        raise HTTPException(
+            status_code=400,
+            detail="name_stem must be non-empty and match ^[A-Za-z0-9_-]+$.",
+        )
+
+    out_dir = Path(payload.output_dir).absolute()
+    deleted: List[str] = []
+    warnings: List[str] = []
+
+    if out_dir.is_dir():
+        # Non-recursive: per-form outputs are written directly into
+        # output_dir, never a subdirectory (see FormPopulator._write_one_form).
+        for path in sorted(out_dir.glob(f"{payload.name_stem}_*")):
+            if path.is_file():
+                path.unlink()
+                deleted.append(str(path))
+
+        if payload.delete_shared_packets:
+            for fname in _SHARED_PACKET_FILENAMES:
+                candidate = out_dir / fname
+                if candidate.is_file():
+                    candidate.unlink()
+                    deleted.append(str(candidate))
+        elif any((out_dir / fname).exists() for fname in _SHARED_PACKET_FILENAMES):
+            warnings.append(
+                "Merged mailing packets (packet_federal.pdf / packet_NY.pdf / "
+                "packet_843.pdf and their JSON/cover-sheet siblings) exist in "
+                "output_dir but were left in place because they are not "
+                "name-stem scoped and delete_shared_packets was not set. "
+                "Pass delete_shared_packets=true only when output_dir is "
+                "known to be dedicated to this one filing."
+            )
+    else:
+        warnings.append(f"output_dir {payload.output_dir!r} does not exist; nothing to delete there.")
+
+    deleted_audit_path: Optional[str] = None
+    if payload.filing_id:
+        audit_dir = os.environ.get(_AUDIT_DIR_ENV)
+        if audit_dir:
+            audit_path = Path(audit_dir) / payload.filing_id / "audit.jsonl"
+            if audit_path.is_file():
+                audit_path.unlink()
+                deleted_audit_path = str(audit_path)
+                deleted.append(str(audit_path))
+                try:
+                    audit_path.parent.rmdir()  # no-op failure if not empty
+                except OSError:
+                    pass
+            else:
+                warnings.append(f"No persisted audit trail found at {audit_path}.")
+        else:
+            warnings.append(
+                f"{_AUDIT_DIR_ENV} is not configured on this server, so no "
+                "audit trail is persisted to disk for any filing_id — "
+                "nothing to erase there."
+            )
+    else:
+        warnings.append(
+            "No filing_id supplied, and POST /api/v1/submit does not "
+            "currently assign one — audit-trail entries for filings made "
+            "through this HTTP API cannot be selectively erased by "
+            "filing_id today (known architectural gap). Only output files "
+            "matched by name_stem were erased."
+        )
+
+    return ErasureResult(
+        status="erased",
+        deleted_files=deleted,
+        deleted_audit_path=deleted_audit_path,
+        warnings=warnings,
+    )
 
 
 if __name__ == "__main__":

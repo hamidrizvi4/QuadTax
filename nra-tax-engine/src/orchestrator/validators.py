@@ -40,6 +40,26 @@ def validate_post_l1(state: "ReturnStateObject") -> List[str]:
             state,
             f"L1: SPT day count ({residency.spt_days_current_year}) is outside 0-366.",
         )
+    # Raw physical-presence day counts (Form 8843 line 4a / Schedule OI item
+    # H) are assigned directly from LLM-extracted I-94 OCR values without
+    # going through Pydantic validation (state mutation doesn't use
+    # validate_assignment). A garbled or truncated I-94 scan can make the
+    # LLM return a negative or >366 day count for a prior year — that value
+    # would otherwise flow straight onto filed forms, and silently skews the
+    # SPT weighted-day formula's residency determination, with nothing here
+    # to catch it. Bound all three raw day-count fields, not just the
+    # current-year one.
+    for label, days in (
+        ("current year", residency.days_present_current_year),
+        ("tax_year - 1", residency.days_present_year_minus_1),
+        ("tax_year - 2", residency.days_present_year_minus_2),
+    ):
+        if days < 0 or days > 366:
+            _flag(
+                state,
+                f"L1: days present in {label} ({days}) is outside 0-366 — "
+                "likely a garbled or truncated I-94 OCR extraction.",
+            )
     if residency.years_in_exempt_status < 0 or residency.years_in_exempt_status > 30:
         _flag(
             state,
@@ -123,6 +143,29 @@ def validate_post_l3(state: "ReturnStateObject") -> List[str]:
         )
     if income.total_1042s_gross < 0:
         _flag(state, f"L3: negative 1042-S gross ({income.total_1042s_gross}).")
+
+    # Withholding totals are assigned onto state directly from the
+    # reconciler's output without Pydantic re-validation (state mutation
+    # doesn't use validate_assignment), so a garbled OCR box value — e.g. a
+    # misread minus sign turning "$4,500" into "-4500" — can leave a
+    # negative withholding figure in the state with no exception raised
+    # anywhere upstream. A negative withholding silently understates the
+    # amount already paid to the IRS (inflating the balance due / hiding a
+    # refund), which is exactly the "plausible-looking but wrong number"
+    # failure mode this engine must never surface un-flagged.
+    if income.total_w2_withholding < 0:
+        _flag(
+            state,
+            f"L3: negative W-2 federal withholding (${income.total_w2_withholding:,.0f}) "
+            "is invalid — likely an OCR sign/decimal error.",
+        )
+    if income.total_1042s_withholding < 0:
+        _flag(
+            state,
+            f"L3: negative 1042-S federal withholding "
+            f"(${income.total_1042s_withholding:,.0f}) is invalid — likely an OCR "
+            "sign/decimal error.",
+        )
 
     # Box-3 wages should be >= Box-1 wages in practice (or 0 if the W-2 doesn't
     # report SS wages). Box-2 federal withholding should be <= ~45% of box 1.

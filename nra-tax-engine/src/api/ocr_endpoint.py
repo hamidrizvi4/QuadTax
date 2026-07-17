@@ -5,9 +5,10 @@ import logging
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from src.api.auth import require_api_key
+from src.api.rate_limit import LLM_ENDPOINT_RATE_LIMIT, limiter
 from src.intake.document_extractor import DocumentExtractor, OcrResult
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,9 @@ def _handle_ocr_error(exc: Exception, correlation: str) -> None:
     tags=["ocr"],
     dependencies=[Depends(require_api_key)],
 )
+@limiter.limit(LLM_ENDPOINT_RATE_LIMIT)
 async def extract_documents(
+    request: Request,
     tax_year: int = Form(default=2025),
     i94_file: Optional[UploadFile] = File(default=None),
     w2_files: List[UploadFile] = File(default=[]),

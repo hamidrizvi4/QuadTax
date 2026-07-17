@@ -13,10 +13,12 @@ Phase 2 changes:
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from src.agents._llm_cache import LLMExtractionCache
 from src.agents._llm_safety import safe_parse
 from src.functions.code_mapper import IncomeCodeMapper
 from src.functions.withholding_reconciler import (
@@ -29,6 +31,16 @@ from src.llm_config import PRIMARY_MODEL, SECONDARY_MODEL, get_openai_client
 
 if TYPE_CHECKING:
     from src.orchestrator.state import ReturnStateObject
+
+
+# Process-lifetime cache shared by every document-extraction call this agent
+# makes (W-2, 1042-S, 1099-*). None of these extractions depend on tax_year
+# or any other agent parameter -- box values on a given document are the
+# same regardless of which return they're being filed for -- so the cache
+# key is the schema name (to keep W-2/1042-S/1099 calls from colliding with
+# each other even if two OCR blobs coincidentally matched) plus the exact
+# system prompt and OCR text.
+_extraction_cache = LLMExtractionCache()
 
 
 class W2Data(BaseModel):
@@ -79,17 +91,60 @@ class IncomeAgent:
         self.secondary_llm_client = secondary_llm_client
 
     def _parse(self, schema, system_prompt: str, user_text: str):
-        return safe_parse(
-            primary_client=self.llm_client,
-            primary_model=PRIMARY_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_text},
-            ],
-            response_format=schema,
-            secondary_client=self.secondary_llm_client,
-            secondary_model=SECONDARY_MODEL if self.secondary_llm_client else None,
+        cache_key = _extraction_cache.make_key(schema.__name__, system_prompt, user_text)
+        return _extraction_cache.get_or_call(
+            cache_key,
+            lambda: safe_parse(
+                primary_client=self.llm_client,
+                primary_model=PRIMARY_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_text},
+                ],
+                response_format=schema,
+                secondary_client=self.secondary_llm_client,
+                secondary_model=SECONDARY_MODEL if self.secondary_llm_client else None,
+            ),
         )
+
+    def _parse_many(self, schema, system_prompt: str, texts: List[str]) -> List[Any]:
+        """Run :meth:`_parse` for every document in ``texts`` concurrently.
+
+        Each document's extraction is independent (no document's LLM call
+        depends on another's result), so this fans the per-document
+        ``self._parse`` calls out across a thread pool instead of the
+        original strictly-sequential ``for`` loop. The underlying OpenAI
+        client is synchronous, so threads (not asyncio) are the fit here.
+
+        Behavior is preserved exactly relative to the old sequential loop:
+
+        * Return order always matches ``texts`` order (``executor.map``
+          yields results in submission order regardless of completion
+          order), so callers that zip results back against their source
+          documents by index see no change.
+        * Fail-fast semantics are preserved: if any document's extraction
+          raises (e.g. ``ExtractionConfidenceError`` from the dual-extract
+          cross-check in ``_llm_safety.safe_parse``), that exception
+          propagates out of this call and no result list is returned --
+          the caller never sees a partial/mixed set of successes, exactly
+          as the old loop would abort on the first failing iteration
+          rather than continuing with what succeeded. The one difference
+          from the old loop is that, on failure, extraction for the
+          *other* documents in the same batch may already have been
+          kicked off (since they run concurrently rather than not being
+          reached yet) -- the externally visible outcome ("fail the whole
+          request") is identical.
+        """
+        if not texts:
+            return []
+        if len(texts) == 1:
+            # Skip the thread-pool overhead; also keeps single-document
+            # behavior byte-for-byte identical to before this change.
+            return [self._parse(schema, system_prompt, texts[0])]
+        with ThreadPoolExecutor(max_workers=len(texts)) as executor:
+            return list(
+                executor.map(lambda t: self._parse(schema, system_prompt, t), texts)
+            )
 
     def process_income(
         self,
@@ -103,38 +158,34 @@ class IncomeAgent:
         """Parse documents, route 1042-S to ECI/FDAP/EXCLUDED, reconcile withholding."""
         form_1099_ocr_texts = form_1099_ocr_texts or []
 
-        parsed_w2s: List[W2Data] = []
-        for w2_text in w2_ocr_texts:
-            parsed_w2s.append(
-                self._parse(
-                    W2Data,
-                    "You are a precise W-2 OCR parser. Extract the requested fields.",
-                    f"W-2 OCR Text:\n{w2_text}",
-                )
-            )
+        # Each of these three extraction passes loops over N independent
+        # documents of the same kind (N W-2s, N 1042-S's, N 1099s). No
+        # document's LLM extraction depends on another's result, so
+        # _parse_many fans the per-document calls out across a thread pool
+        # rather than making them one-at-a-time. The three passes themselves
+        # still run in sequence (W-2s, then 1042-S's, then 1099s) since that
+        # ordering was never the bottleneck and preserving it keeps this
+        # change minimal.
+        parsed_w2s: List[W2Data] = self._parse_many(
+            W2Data,
+            "You are a precise W-2 OCR parser. Extract the requested fields.",
+            [f"W-2 OCR Text:\n{w2_text}" for w2_text in w2_ocr_texts],
+        )
 
-        parsed_1042s: List[Form1042SData] = []
-        for f_text in form_1042s_ocr_texts:
-            parsed_1042s.append(
-                self._parse(
-                    Form1042SData,
-                    "You are a precise 1042-S OCR parser. Extract the requested fields. "
-                    "Chapter indicator: return 3 for standard NRA withholding, 4 for FATCA.",
-                    f"1042-S OCR Text:\n{f_text}",
-                )
-            )
+        parsed_1042s: List[Form1042SData] = self._parse_many(
+            Form1042SData,
+            "You are a precise 1042-S OCR parser. Extract the requested fields. "
+            "Chapter indicator: return 3 for standard NRA withholding, 4 for FATCA.",
+            [f"1042-S OCR Text:\n{f_text}" for f_text in form_1042s_ocr_texts],
+        )
 
-        parsed_1099s: List[Form1099Data] = []
-        for f_text in form_1099_ocr_texts:
-            parsed_1099s.append(
-                self._parse(
-                    Form1099Data,
-                    "You are a precise 1099 OCR parser. Identify the form kind "
-                    "(INT/DIV/B/MISC) and extract the gross amount and box 4 "
-                    "federal income tax withheld.",
-                    f"1099 OCR Text:\n{f_text}",
-                )
-            )
+        parsed_1099s: List[Form1099Data] = self._parse_many(
+            Form1099Data,
+            "You are a precise 1099 OCR parser. Identify the form kind "
+            "(INT/DIV/B/MISC) and extract the gross amount and box 4 "
+            "federal income tax withheld.",
+            [f"1099 OCR Text:\n{f_text}" for f_text in form_1099_ocr_texts],
+        )
 
         # --- W-2 aggregation ----------------------------------------------
         total_w2_wages = sum(w2.box_1_wages for w2 in parsed_w2s)

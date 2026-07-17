@@ -27,6 +27,7 @@ from src.agents.l7_credits import CreditsAgent
 from src.agents.l8_fica import FicaAgent
 from src.agents.l9_ny import NYAgent
 from src.assembly.form_populator import FormPopulator
+from src.database.tax_year import load_year, supported_years
 from src.functions import estimated_tax_penalty as etp_module
 from src.functions import itin_eligibility as itin_module
 from src.functions.amt_calculator import AMTCalculator
@@ -37,6 +38,28 @@ from src.orchestrator.state import ReturnStateObject
 
 class OrchestrationError(RuntimeError):
     """Raised when a layer's dependencies are not satisfied."""
+
+
+class UnsupportedTaxYearError(OrchestrationError):
+    """Raised when the filer's requested tax year has no vendored data yet.
+
+    Distinct from the base :class:`OrchestrationError` (a real orchestration
+    bug) so callers, notably the API layer, can surface a clean, actionable
+    4xx response — "this tax year isn't supported yet, here's what is" —
+    instead of letting the underlying :class:`FileNotFoundError` from
+    :func:`src.database.tax_year.load_year` propagate untranslated into an
+    opaque 500 deep inside a later layer (L6/L8 are the first layers that
+    actually touch year-keyed data).
+    """
+
+    def __init__(self, tax_year: int, available_years: List[int]):
+        self.tax_year = tax_year
+        self.available_years = list(available_years)
+        available = ", ".join(str(y) for y in self.available_years) or "none"
+        super().__init__(
+            f"Tax year {tax_year} is not yet supported by this engine. "
+            f"Supported tax year(s): {available}."
+        )
 
 
 class HumanReviewRequiredError(OrchestrationError):
@@ -249,6 +272,20 @@ class TaxEngine:
         state.tax_year = mcq_answers["tax_year"]
 
         tax_year = mcq_answers["tax_year"]
+
+        # Fail fast on an unsupported tax year, before spending any LLM calls
+        # on L1/L3/L4. Every year-keyed calculator downstream (TaxCalculator,
+        # FicaCalculator, AMTCalculator, NYTaxCalculator, TreatyEvaluator) all
+        # load the same per-year directory, so checking it once here catches
+        # exactly the same condition they would hit deeper in the DAG —
+        # just before any partial, wasted work happens and with a clear,
+        # well-typed exception instead of a bare FileNotFoundError surfacing
+        # from whichever layer happens to touch it first.
+        try:
+            load_year(tax_year)
+        except FileNotFoundError as exc:
+            raise UnsupportedTaxYearError(tax_year, supported_years()) from exc
+
         visa_type = mcq_answers["visa_type"]
         first_us_arrival_year = mcq_answers["first_us_arrival_year"]
         tax_residence_country = mcq_answers["tax_residence_country"]

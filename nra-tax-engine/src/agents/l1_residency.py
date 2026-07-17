@@ -14,12 +14,20 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import BaseModel, Field
 
+from src.agents._llm_cache import LLMExtractionCache
 from src.agents._llm_safety import safe_parse
 from src.functions.spt_calculator import SubstantialPresenceCalculator
 from src.llm_config import PRIMARY_MODEL, SECONDARY_MODEL, get_openai_client
 
 if TYPE_CHECKING:
     from src.orchestrator.state import ReturnStateObject
+
+
+# Process-lifetime cache for I-94 day-count extraction. Keyed on the raw OCR
+# text *and* tax_year (the LLM is asked to count days for tax_year,
+# tax_year - 1, and tax_year - 2, so a different tax_year over the same
+# document text must NOT be a cache hit).
+_i94_extraction_cache = LLMExtractionCache()
 
 
 def _parse_iso_date(value: Optional[str]) -> Optional[date]:
@@ -94,17 +102,21 @@ class ResidencyAgent:
 
         user_prompt = f"i94_ocr_text:\n{i94_ocr_text}"
 
-        extracted_days: I94DayCountParams = safe_parse(
-            primary_client=self.llm_client,
-            primary_model=PRIMARY_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format=I94DayCountParams,
-            secondary_client=self.secondary_llm_client,
-            secondary_model=SECONDARY_MODEL if self.secondary_llm_client else None,
-            critical_fields=["days_current_year", "days_minus_1", "days_minus_2"],
+        cache_key = _i94_extraction_cache.make_key(tax_year, i94_ocr_text)
+        extracted_days: I94DayCountParams = _i94_extraction_cache.get_or_call(
+            cache_key,
+            lambda: safe_parse(
+                primary_client=self.llm_client,
+                primary_model=PRIMARY_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format=I94DayCountParams,
+                secondary_client=self.secondary_llm_client,
+                secondary_model=SECONDARY_MODEL if self.secondary_llm_client else None,
+                critical_fields=["days_current_year", "days_minus_1", "days_minus_2"],
+            ),
         )
 
         # 2. The Deterministic Handoff
